@@ -1,0 +1,158 @@
+[
+  {
+    "service": "wbst",
+    "repository": "MRRSoft/znode-webstore10x-page-builder",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "pgbld",
+    "repository": "MRRSoft/znode-webstore10x-page-builder",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "admin",
+    "repository": "MRRSoft/znode10-admin-migration",
+    "working_directory": "./Znode.Admin",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "api",
+    "repository": "MRRSoft/znode10-api-migration",
+    "working_directory": "./Znode.Multifront",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "gateway",
+    "repository": "MRRSoft/znode10-api-gateways",
+    "working_directory": "./Znode.APIGateways",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "customtable",
+    "repository": "MRRSoft/znode10-api-migration",
+    "working_directory": "./Znode.Multifront",
+    "compose_file": "docker-compose-customtable.yml"
+  },
+  {
+    "service": "v2",
+    "repository": "MRRSoft/znode10-api-migration",
+    "working_directory": "./Znode.Multifront",
+    "compose_file": "docker-compose-v2-api.yml"
+  },
+  {
+    "service": "a-commerce",
+    "repository": "MRRSoft/znode10-commerceportal-api",
+    "working_directory": "Znode_CommercePortal/",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "portal",
+    "repository": "MRRSoft/znode10-commerceportal",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "cstm",
+    "repository": "MRRSoft/znode10-customapi-sdk",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "paymngr",
+    "repository": "MRRSoft/znode10-payment-manager",
+    "working_directory": "./API/Znode.Payment.Manager/",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "spreedly",
+    "repository": "MRRSoft/znode10-plugin-payment-spreedly",
+    "working_directory": "./API",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "braintree",
+    "repository": "MRRSoft/znode10-plugin-payment-braintree",
+    "working_directory": "./API",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "reports",
+    "repository": "MRRSoft/znode10-reports-api",
+    "working_directory": "./Znode.Reports",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "shipping",
+    "repository": "MRRSoft/znode10-shipping-manager",
+    "working_directory": "./API/Znode.Shipping.Manager/",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "fedex",
+    "repository": "MRRSoft/znode10-plugin-shipping-fedex",
+    "working_directory": "./API/Znode.Plugin.Shipping.Fedex/",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "ups",
+    "repository": "MRRSoft/znode10-plugin-shipping-ups",
+    "working_directory": "./API/Znode.Plugin.Shipping.UPS/",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "azfunction",
+    "repository": "MRRSoft/znode10-api-migration",
+    "working_directory": "./Znode.AzureFunction",
+    "compose_file": "docker-compose-azfunctions.yml"
+  },
+  {
+    "service": "graphqlapi",
+    "repository": "MRRSoft/znode10-graphql-api",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "taxmanager",
+    "repository": "MRRSoft/znode10-tax-manager",
+    "working_directory": "./API/Znode.Tax.Manager/",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "avatax",
+    "repository": "MRRSoft/znode10-plugin-tax-avatax",
+    "working_directory": "./API/Znode.Plugin.Tax.Avatax/",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "plugin",
+    "repository": "MRRSoft/znode10-plugin-server",
+    "working_directory": "./Znode.Plugin.Server",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "diagno",
+    "repository": "MRRSoft/znode-diagnostic-app",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "python",
+    "repository": "MRRSoft/znode10-publish-elasticindex",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "cc-api",
+    "repository": "MRRSoft/znode-commerce-connector-poc",
+    "working_directory": "./",
+    "compose_file": "docker-compose-cc-api.yml"
+  }, 
+  {
+    "service": "cc-admin",
+    "repository": "MRRSoft/znode-commerce-connector-poc",
+    "working_directory": "./",
+    "compose_file": "docker-compose-cc-admin.yml"
+  }  
+]

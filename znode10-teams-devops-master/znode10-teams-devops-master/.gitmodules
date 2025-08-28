@@ -1,0 +1,4 @@
+[submodule "znode10-devops-templates"]
+	path = znode10-helm/znode-templates
+	url = https://github.com/MRRSoft/znode10-devops-templates.git
+	branch = master

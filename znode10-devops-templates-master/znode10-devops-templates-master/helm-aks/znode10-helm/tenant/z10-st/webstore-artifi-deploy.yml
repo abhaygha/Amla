@@ -1,0 +1,68 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    znodekube.version: "10.0"
+  creationTimestamp: null
+  labels:
+    app: znode10xwebstore-artifi-app
+  name: znode10xwebstore-artifi-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: znode10xwebstore-artifi-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+        znodekube.version: "10.0"
+      creationTimestamp: null
+      labels:
+        network/znode10xapinetworkexternal: "true"
+        app: znode10xwebstore-artifi-app
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: agentpool
+                operator: In
+                values:
+                - znode10upl
+
+      imagePullSecrets:
+      - name: tenantacrsecret
+
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: webstore-artifi-configmap
+
+        image: az204containerregistery.azurecr.io/znode10xwebstoreimage:z10-st-76
+
+        resources:
+          requests:
+            memory: 1000Mi
+            cpu: 1000m
+          limits:
+            memory: 1500Mi
+            cpu: 1500m
+        imagePullPolicy: Always
+        name: znode10xwebstore
+        lifecycle:
+          preStop:
+            exec:
+              command: [ "/bin/sh", "-c", "sleep 120" ]
+        ports:
+        - containerPort: 443
+status: {}
+---
+
+

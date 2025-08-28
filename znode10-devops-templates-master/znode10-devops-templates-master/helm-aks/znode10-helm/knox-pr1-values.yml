@@ -1,0 +1,108 @@
+global:
+
+  tenant: ""
+  environment: ""
+  ingressClassName: ""
+  domain: ""
+
+  newrelic:
+    enabled: true
+    licensekey: ""
+
+resources:
+  znode10xapi:
+    configmap:
+      appsettings__IsShippingHandlingCharge: "true"
+
+  znode10xcustomtable:
+    resources:
+      requests:
+        memory: "450Mi"
+        cpu: "250m"
+      limits:
+        memory: "500Mi"
+        cpu: "300m"
+
+ingress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret1
+    services:
+    - knoxapi
+    - admin
+    - knoxapigateway
+    - customapi
+  rules:
+  - name: knoxapi
+    serviceName: znode10xapi
+    servicePort: 80
+    paths:
+    - path: /swagger
+      pathType: Prefix
+    - path: /
+      pathType: Prefix
+  - name: admin
+    serviceName: znode10xadmin
+    servicePort: 80
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: knoxapigateway
+    serviceName: znode10xapigateways
+    servicePort: 80
+    paths:
+    - path: /swagger
+      pathType: Prefix
+    - path: /
+      pathType: Prefix
+  - name: customapi
+    serviceName: znode10customapi
+    servicePort: 80
+    paths:
+    - path: /swagger/
+      pathType: Prefix
+    - path: /
+      pathType: Prefix
+
+webIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret1
+    services:
+    - webstore
+    - webstore-preview
+    - pagebuilder
+  rules:
+  - name: webstore
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: webstore-preview
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: pagebuilder
+    serviceName: znode10xpagebuilder
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+cpIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret1
+    services:
+    - spp
+  rules:
+  - name: spp
+    serviceName: znode10xcp
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix

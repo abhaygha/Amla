@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: znode10-redis-pv
+spec:
+  capacity:
+    storage: 4Gi # Adjust size as needed
+  accessModes:
+  - ReadWriteMany # RWX for shared access
+  storageClassName: azurefile-premium # Use the storage class for Azure Files
+  azureFile:
+    secretName: znode10storage
+    shareName: znode10-redis-share # Name of the Azure File Share
+    #namespace: znode # Namespace where the secret is created
+  persistentVolumeReclaimPolicy: Delete # Retain or Delete based on your needs
+
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: znode10-redis-pvc
+  namespace: znode # Match this with your namespace
+spec:
+  accessModes:
+  - ReadWriteMany # RWX for shared access
+  resources:
+    requests:
+      storage: 4Gi # Adjust size as needed
+  storageClassName: azurefile-premium # Should match the PV storage class

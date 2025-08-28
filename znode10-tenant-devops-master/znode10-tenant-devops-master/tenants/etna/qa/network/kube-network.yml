@@ -1,0 +1,68 @@
+  
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  creationTimestamp: null
+  name: znode10xmongonetwork
+spec:
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              io.znodekube.network/znode10xmongonetwork: "true"
+  podSelector:
+    matchLabels:
+      io.znodekube.network/znode10xmongonetwork: "true"
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  creationTimestamp: null
+  name: znode10xapinetworkexternal
+spec:
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              io.znodekube.network/znode10xapinetworkexternal: "true"
+  podSelector:
+    matchLabels:
+      io.znodekube.network/znode10xapinetworkexternal: "true"
+
+--- 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  creationTimestamp: null
+  name: znode10xapinetwork
+spec:
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              io.znodekube.network/znode10xapinetwork: "true"
+  podSelector:
+    matchLabels:
+      io.znodekube.network/znode10xapinetwork: "true"
+
+--- 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  creationTimestamp: null
+  name: znode10xdbnetwork
+spec:
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              io.znodekube.network/znode10xdbnetwork: "true"
+  podSelector:
+    matchLabels:
+      io.znodekube.network/znode10xdbnetwork: "true"
+
+--- 
+
+

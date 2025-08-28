@@ -1,0 +1,81 @@
+architecture: "replication"
+auth:
+  enabled: false
+
+# Redis Master Configuration
+master:
+  disableCommands: [] # Override the disableCommands setting to enable FLUSHALL and FLUSHDB
+  persistence:
+    enabled: true
+    existingClaim: redis-pvc
+  service:
+    type: ClusterIP
+    nameOverride: znode10redisdevetna-master
+  podAntiAffinityPreset: "soft"
+  resources:
+    requests:
+      memory: "5000Mi"
+      cpu: "100m"
+    limits:
+      memory: "6000Mi"
+      cpu: "200m"
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: agentpool
+            operator: In
+            values:
+            - znode10upl # Node affinity for master
+replica:
+  disableCommands: []
+  replicaCount: 2
+  persistence:
+    enabled: false
+  #    existingClaim: znode10-redis-pvc
+  service:
+    type: ClusterIP
+    nameOverride: znode10redisdevetna-replica
+  podAntiAffinityPreset: "soft"
+  resources:
+    requests:
+      memory: "2000Mi"
+      cpu: "100m"
+    limits:
+      memory: "3000Mi"
+      cpu: "200m"
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: agentpool
+            operator: In
+            values:
+            - znode10apl # Node affinity for replicas
+sentinel:
+  enabled: true
+  replicas: 2
+  service:
+    type: ClusterIP
+    nameOverride: znode10redis-sentinel
+  podAntiAffinityPreset: "soft"
+  configmap: |
+    sentinel monitor mymaster znode10redisdevetna-master.znode.svc.cluster.local 6379 2
+    sentinel down-after-milliseconds mymaster 5000
+    sentinel failover-timeout mymaster 10000
+  resources:
+    requests:
+      memory: "1000Mi"
+      cpu: "100m"
+    limits:
+      memory: "1000Mi"
+      cpu: "100m"
+
+# helm repo add bitnami https://charts.bitnami.com/bitnami
+# install or upgrade using below commands
+# helm install znode10redisdevetna bitnami/redis -f etna-redis.yml -n znode
+# helm upgrade znode10redisdevetna bitnami/redis -f etna-redis.yml -n znode
+# kubectl run --namespace znode redis-client --restart='Never'  --image docker.io/bitnami/redis:7.4.0-debian-12-r2 --command -- sleep infinity
+# kubectl exec --tty -i redis-client    --namespace znode -- bash

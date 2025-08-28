@@ -1,0 +1,39 @@
+{{- if (and .Values.cpIngress (or .Values.cpIngress.enabled true)) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cp-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+spec:
+  ingressClassName: {{ .Values.global.ingressClassName | default "nginx" }}
+
+  tls:
+    - hosts:
+        {{- range .Values.cpIngress.tls.services }}
+        - {{ . }}{{ $.Values.global.domain }}
+        {{- end }}
+      secretName: {{ .Values.cpIngress.tls.secretName }}
+  rules:
+    {{- range .Values.cpIngress.rules }}
+    {{- $rule := . }}
+    {{- $svcName := .serviceName }}
+    {{- $svcPort := .servicePort }}
+    - host: {{ $rule.name }}{{ $.Values.global.domain }}
+      http:
+        paths:
+          {{- range $rule.paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $svcName }}
+                port:
+                  number: {{ $svcPort }}
+          {{- end }}
+    {{- end }}
+{{- end }}

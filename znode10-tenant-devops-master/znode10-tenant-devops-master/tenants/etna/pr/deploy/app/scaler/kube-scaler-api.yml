@@ -1,0 +1,30 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  annotations:
+    znodekube.version: "10.0"
+  name: znode10xapi-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: znode10xapi
+  minReplicas: 6
+  maxReplicas: 8
+  metrics:
+  - type: ContainerResource
+    containerResource:
+      name: cpu
+      container: znode10xapicontainer
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: ContainerResource
+    containerResource:
+      name: memory
+      container: znode10xapicontainer
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+

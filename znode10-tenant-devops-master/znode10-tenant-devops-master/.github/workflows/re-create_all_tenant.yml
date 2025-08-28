@@ -1,0 +1,180 @@
+name: Re-creating Pods
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Choose Environment'
+        type: choice
+        options:
+          - 'growdev'
+          - 'trng'
+          - 'uat'
+          - 'sandbox'
+      restart_all:
+        description: 'Restart all deployments except znode10xrabbitmq?'
+        required: true
+        type: boolean
+      pods_restart_all:
+        description: 'Restart all pods except znode10xrabbitmq?'
+        required: true
+        type: boolean
+      choice:
+        description: 'Send email notification?'
+        type: choice
+        options:
+          - 'Yes'
+          - 'No'
+
+jobs:
+  setup_terraform:
+    name: Terraform and Pod Creation
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up Kubeconfig
+        run: |
+            mkdir -p ~/.kube
+            echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+        shell: bash
+
+      - name: Delete existing ConfigMaps
+        run: |
+          kubectl delete configmap znode10customapi -n znode
+          kubectl delete configmap znode10xadmin -n znode
+          kubectl delete configmap znode10xapi -n znode
+          kubectl delete configmap znode10xapigateways -n znode
+          kubectl delete configmap znode10xapiv2 -n znode
+          kubectl delete configmap znode10xcustomtable -n znode
+          kubectl delete configmap znode10xpayment -n znode
+          kubectl delete configmap znode10xwebstore -n znode
+          kubectl delete configmap znode10xazfunctions -n znode
+          
+          # Skip deletion of specific ConfigMaps for 'etna' environment
+          if [ "${{ github.event.inputs.environment }}" != "etnadev" ]; then
+            kubectl delete configmap znode10xcp -n znode
+            kubectl delete configmap znode10xapigateway-cp -n znode
+            kubectl delete configmap znode10apicp -n znode
+          fi
+
+      - name: Terraform Init and Apply
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "knoxdev" ]; then
+            cd ./tenants/knox/dev/terraform
+          elif [ "${{ github.event.inputs.environment }}" == "etnadev" ]; then
+            cd ./tenants/etna/dev/terraform
+          elif [ "${{ github.event.inputs.environment }}" == "uat" ]; then
+            cd ./tenants/uat/terraform
+          elif [ "${{ github.event.inputs.environment }}" == "trng" ]; then
+            cd ./tenants/trng/terraform
+          elif [ "${{ github.event.inputs.environment }}" == "growdev" ]; then
+            cd ./tenants/grow/dev/terraform
+          elif [ "${{ github.event.inputs.environment }}" == "sandbox" ]; then
+            cd ./tenants/usds/terraform
+          fi
+          terraform init
+          terraform apply -auto-approve
+
+      - name: kubernetes pods apply
+        if: ${{inputs.pods_restart_all == true}} 
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "knoxdev" ]; then
+            cd ./tenants/knox/dev/deploy/app/pods
+          elif [ "${{ github.event.inputs.environment }}" == "etnadev" ]; then
+            cd ./tenants/etna/dev/deploy/app/pods
+          elif [ "${{ github.event.inputs.environment }}" == "uat" ]; then
+            cd ./tenants/uat/deploy/app/pods
+          elif [ "${{ github.event.inputs.environment }}" == "trng" ]; then
+            cd ./tenants/trng/deploy/app/pods
+          elif [ "${{ github.event.inputs.environment }}" == "growdev" ]; then
+            cd ./tenants/grow/dev/deploy/app/pods
+          elif [ "${{ github.event.inputs.environment }}" == "sandbox" ]; then
+            cd ./tenants/usds/deploy/app/pods
+          fi
+          kubectl apply -f .
+
+      - name: Restart Deployments
+        run: |
+            RESTART_ALL=${{ github.event.inputs.restart_all }}
+            DEPLOYMENT=${{ github.event.inputs.deployment_name }}
+
+            if [ "$RESTART_ALL" == "true" ]; then
+                echo "Restarting all deployments in namespace znode except znode10xrabbitmq"
+                for deployment in $(kubectl get deployments -n znode -o name | grep -v "znode10xrabbitmq"); do
+                if kubectl get "$deployment" -n znode &>/dev/null; then
+                    echo "Restarting $deployment"
+                    kubectl rollout restart "$deployment" -n znode
+                else
+                    echo "$deployment not found, skipping."
+                fi
+                done
+            elif [ -n "$DEPLOYMENT" ]; then
+                if kubectl get deployment "$DEPLOYMENT" -n znode &>/dev/null; then
+                echo "Restarting $DEPLOYMENT"
+                kubectl rollout restart "$DEPLOYMENT" -n znode
+                else
+                echo "Deployment $DEPLOYMENT not found in namespace znode."
+                fi
+            else
+                echo "No deployment specified and 'Restart all' option is disabled."
+            fi
+
+  email_alerts:
+    name: Send Email Notification
+    runs-on: ubuntu-latest
+    needs: setup_terraform
+    if: ${{ github.event.inputs.choice == 'Yes' }}
+
+    steps:
+      - name: Set Email Subject and Body
+        id: set_email_content
+        run: |
+          STATUS=${{ job.status }}
+          DEPLOYMENT_TIME=$(TZ='Asia/Kolkata' date +"%Y-%m-%d %H:%M:%S")
+          if [ "${STATUS}" == "success" ]; then
+            SUBJECT="Znode10 ${{ github.event.inputs.environment }} build - *Success*"
+            BODY="Hi Team,<br><font color='green'>The deployment status of Znode10 ${{ github.event.inputs.environment }} is done successfully.</font><br><br><b>Deployment Time:</b> ${DEPLOYMENT_TIME}"
+          else
+            SUBJECT="Znode10 ${{ github.event.inputs.environment }} build - *Failed*"
+            BODY="Hi Team,<br><font color='red'>The deployment status of Znode10 ${{ github.event.inputs.environment }} has failed.</font><br><br><b>Deployment Time:</b> ${DEPLOYMENT_TIME}"
+          fi
+          echo "subject=${SUBJECT}" >> $GITHUB_ENV
+          echo "body=${BODY}" >> $GITHUB_ENV
+
+      - name: Send Email
+        env:
+          EMAIL_FROM: "tfsalert@amla.io"
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          TRIGGERED_BY: ${{ github.actor }}
+          SUBJECT: ${{ env.subject }}
+          BODY: ${{ env.body }}
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "etnadev" ] || [ "${{ github.event.inputs.environment }}" == "knoxdev" ]; then
+            EMAIL_TO="znode-mission@mrrsoft.com,aatul.palandurkar@amla.io,anup.gaherwar@amla.io,sagar.sapkal@amla.io,pravin.giradkar@amla.io,akash.kelkar@amla.io,dushyant.kawishwar@amla.io"
+          else
+            EMAIL_TO="znode-mission@mrrsoft.com,devops@amla.io"
+          fi
+          
+          IFS=',' read -r -a EMAIL_ARRAY <<< "${EMAIL_TO}"
+          BODY="${BODY} <br>This build was triggered by: ${TRIGGERED_BY}."
+          for EMAIL in "${EMAIL_ARRAY[@]}"; do
+            echo "Sending email to ${EMAIL}"  # Debug statement
+            echo -e "Subject:${SUBJECT}\nContent-Type: text/html\n\n${BODY}" | \
+            curl --url 'smtps://smtp.gmail.com:465' --ssl-reqd \
+              --mail-from "${EMAIL_FROM}" --mail-rcpt "${EMAIL}" \
+              --user "${EMAIL_FROM}:${EMAIL_PASSWORD}" \
+              --upload-file -
+          done
+
+   

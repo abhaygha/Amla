@@ -1,0 +1,75 @@
+
+name: Tag Multiple Repositories from Master
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v10.0.2.0)'
+        required: true
+        default: 'v10.0.0.0'
+      release_name:
+        description: 'Release name (e.g., Znode10-10.0.2.0-Release)'
+        required: true
+        default: 'Znode10-10.0.0.0-Release'
+
+jobs:
+  tag_repositories:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        repo:
+          - znode-webstore10x-page-builder
+          - znode10-admin-migration
+          - znode10-api-gateways
+          - znode10-api-migration
+          - znode10-commerceportal-api
+          - znode10-commerceportal
+          - znode10-customapi-sdk
+          - znode10-payment-manager
+          - znode10-plugin-payment-spreedly
+          - znode10-plugin-payment-braintree
+          - znode10-plugin-tax-avatax
+          - znode10-tax-manager
+          - znode10-reports-api
+          - znode10-reports-api
+          - znode10-hangfire-db
+          - znode10-recommendation-engine-db
+          - znode10-plugin-payment-db
+          - znode10-multifront-db
+          - znode10-graphql-api
+          - znode10-plugin-shipping-fedex
+          - znode10-devops-templates
+          - znode10-tenant-devops
+
+    steps:
+      - name: Get latest commit SHA from master for ${{ matrix.repo }}
+        id: get_sha
+        run: |
+          REPO=${{ matrix.repo }}
+          SHA=$(curl -s -H "Authorization: token ${{ secrets.PAT }}" \
+            https://api.github.com/repos/MRRSoft/$REPO/commits/master | jq -r '.sha')
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+      - name: Create Release ${{ github.event.inputs.tag }} on master of ${{ matrix.repo }}
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.PAT }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/MRRSoft/${{ matrix.repo }}/git/refs \
+            -d "{
+              \"ref\": \"refs/tags/${{ github.event.inputs.tag }}\",
+              \"sha\": \"${{ steps.get_sha.outputs.sha }}\"
+            }"
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.PAT }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/MRRSoft/${{ matrix.repo }}/releases \
+            -d "{
+              \"tag_name\": \"${{ github.event.inputs.tag }}\",
+              \"target_commitish\": \"master\",
+              \"name\": \"${{ github.event.inputs.release_name }}\",
+              \"body\": \"Release ${{ github.event.inputs.release_name }} created with tag ${{ github.event.inputs.tag }} on master branch.\",
+              \"draft\": false,
+              \"prerelease\": false
+            }"

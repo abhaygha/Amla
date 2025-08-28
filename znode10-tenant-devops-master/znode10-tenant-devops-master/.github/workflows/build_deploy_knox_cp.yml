@@ -1,0 +1,91 @@
+name: Build and Deploy CP knoxpr
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        type: string
+        description: Enter hotfix branch, If any
+        required: true
+        default: dev
+      environment:
+        type: choice
+        description: Select the environment
+        required: true
+        options:
+        - knoxpr1
+        - knoxnp
+        - knoxdev
+
+env:
+  IMAGE_TAG: z10-${{ github.event.inputs.environment }}-${{ github.run_number }}
+
+jobs: 
+  build:
+    name: Build CP Knoxdev 
+    runs-on: ubuntu-latest
+    environment: ${{github.event.inputs.environment}}
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-pro-knox-cp-react-fork
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{inputs.branch}}
+
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.TENANT_ACRUN }}
+          password: ${{ secrets.TENANT_ACRPW }}
+          registry: ${{ vars.TENANT_ACR_SERVER }}
+
+      - name: Docker Compose Build 
+        working-directory: ./
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ vars.TENANT_ACR_SERVER }}" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+      - name: Docker Logout
+        if: always()
+        continue-on-error: true
+        run: docker logout ${{ vars.TENANT_ACR_SERVER }}
+
+      - name: Notification
+        if: ${{ failure() }}
+        uses: Co-qn/google-chat-notification@releases/v1
+        with:
+          name: Z10 CP ${{ github.event.inputs.environment }} Build
+          url: ${{ secrets.DEPLOYMENT_ALERTS_KNOX }}
+          status: ${{ job.status }}
+
+  deploy_knoxnp:
+    name: Deploy CP knoxnp
+    runs-on: ${{ github.event.inputs.environment == 'knoxdev' && '100.195' || 'ubuntu-latest' }}
+    environment: ${{github.event.inputs.environment}}
+    needs: build
+    steps:
+  
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+  
+      - name: Kubernetes Delete Deploy
+        run: |
+          kubectl set image deployment/znode10xcp znode10xcp=${{ vars.TENANT_ACR_SERVER }}/znode10cpportalimage:${{ env.IMAGE_TAG }} -n znode
+          
+      - name: Send API Deployment Status
+        uses: Co-qn/google-chat-notification@releases/v1
+        with:
+          name: Z10 CP ${{ github.event.inputs.environment }} Deployment
+          url: ${{ secrets.DEPLOYMENT_ALERTS_KNOX }}
+          status: ${{ job.status }}
+        if: always()
+
+        

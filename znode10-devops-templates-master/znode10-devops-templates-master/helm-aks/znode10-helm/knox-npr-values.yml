@@ -1,0 +1,68 @@
+global:
+scheduler:
+  enabled: true # Set to true per env when needed
+  schedule:  "0 7 * * *" # UTC time → 2:00 AM CST / 12:30 PM IST
+
+  targetDeployments:
+  - znode10xapi
+  - znode10xadmin
+  - znode10xapiv2
+  - znode10xapicp
+  - znode10xwebstore
+  - znode10xapigateways
+multiwebIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret
+    services:
+    - webstore-automation
+  rules:
+  - name: webstore-automation
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+resources:
+  znode10xcp:
+    enableService: true
+    serviceType: ClusterIP
+    port: 443
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10cpportalimage
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "2028Mi"
+        cpu: "600m"
+      limits:
+        memory: "2256Mi"
+        cpu: "700m"
+    configmap:
+      TZ: "America/New_York"
+      PORT: "443"
+      HTTPS: "true"
+      REACT_APP_Znode_Admin_Website: "https://admin{{ $.Values.global.domain }}"
+      REACT_APP_API_URL: "https://apigateways{{ $.Values.global.domain }}"
+      REACT_APP_BASE_URL: "https://commerceportal{{ $.Values.global.domain }}"
+      REACT_APP_THUMBNAIL_IMAGE_PATH: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      REACT_APP_CP_URL_PATH: "http://znode10xapicp.{{ .Release.Namespace }}.svc.cluster.local"
+      REACT_APP_CP_Client_Name: "api{{ $.Values.global.domain }}"
+      REACT_APP_CP_Client_Key: "{{ .Values.global.key.domainkey }}"
+
+  znode10xapi:
+    configmap:
+      appsettings__IsShippingHandlingCharge: "true"
+
+  znode10xcustomtable:
+    resources:
+      requests:
+        memory: "450Mi"
+        cpu: "250m"
+      limits:
+        memory: "500Mi"
+        cpu: "300m"

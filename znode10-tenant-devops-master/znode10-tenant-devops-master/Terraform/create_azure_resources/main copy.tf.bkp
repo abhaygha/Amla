@@ -1,0 +1,203 @@
+# Provider configuration
+provider "azurerm" {
+  features {}
+  subscription_id = var.subscription_id  # Use a variable for the subscription ID
+}
+
+# Resource Group
+resource "azurerm_resource_group" "main" {
+  name     = "${var.tenant}-${var.environment}-rg"
+  location = var.location
+}
+
+# Azure Container Registry (Optional)
+resource "azurerm_container_registry" "acr" {
+  count               = var.deploy_acr ? 1 : 0
+  name                = "${var.tenant}${var.environment}acr"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  sku                 = "Basic"
+  admin_enabled       = true
+}
+
+
+# AKS Cluster with a System Node Pool
+resource "azurerm_kubernetes_cluster" "aks" {
+  count               = var.deploy_aks ? 1 : 0
+  name                = "${var.tenant}-${var.environment}-aks"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.main.name
+  dns_prefix          = "${var.tenant}-${var.environment}-aks"
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  # Default Node Pool (System Node Pool)
+  default_node_pool {
+    name       = "znode10apl"
+    vm_size    = "Standard_D4as_v4"
+    node_count = 2
+    min_count  = 2
+    max_count  = 5
+    enable_auto_scaling = true
+  }
+
+  # Additional User Node Pool
+  lifecycle { ignore_changes = [default_node_pool] }
+  agent_pool_profile {
+    name         = "znode10upl"
+    vm_size      = "Standard_D4as_v4"
+    count        = 2
+    enable_auto_scaling = true
+    min_count    = 2
+    max_count    = 5
+  }
+
+  network_profile {
+    network_plugin    = "azure"              # Azure CNI
+    network_policy    = "calico"             # Calico for network policies
+    load_balancer_sku = "Standard"           # Standard load balancer
+    dns_service_ip    = "10.0.0.10"          # DNS service IP
+    service_cidr      = "10.0.0.0/16"        # Service CIDR
+    pod_cidr          = null                 # Not needed with Azure CNI
+    outbound_type     = "loadBalancer"       # Outbound via Load Balancer
+  }
+
+  api_server_authorized_ip_ranges = null     # Public access to API server (set to IP ranges if restriction is needed)
+}
+
+
+# Additional User Node Pool
+resource "azurerm_kubernetes_cluster_node_pool" "user_node_pool" {
+  count                = var.deploy_aks ? 1 : 0
+  name                 = "znode10upl"  # Set the name of the user pool
+  kubernetes_cluster_id = azurerm_kubernetes_cluster.aks[0].id
+  vm_size              = "Standard_D4as_v4"
+  node_count           = 2
+  auto_scaling_enabled = true
+  min_count            = 2
+  max_count            = 5
+  mode                 = "User"  # Specify as a user node pool
+}
+
+# Storage Account with CDN
+resource "azurerm_storage_account" "storage" {
+  count                    = var.deploy_storage ? 1 : 0
+  name                     = "${var.tenant}${var.environment}storage"
+  resource_group_name      = azurerm_resource_group.main.name
+  location                 = var.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+}
+
+# Azure CDN Profile
+resource "azurerm_cdn_profile" "cdn_profile" {
+  count               = var.deploy_storage ? 1 : 0
+  name                = "${var.tenant}${var.environment}-cdnprofile"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  sku                 = "Standard_Microsoft"
+}
+
+# CDN Endpoint for Storage Account
+resource "azurerm_cdn_endpoint" "cdn_endpoint" {
+  count                       = var.deploy_storage ? 1 : 0
+  name                        = "${var.tenant}${var.environment}"
+  location                    = var.location
+  profile_name                = azurerm_cdn_profile.cdn_profile[0].name
+  resource_group_name         = azurerm_resource_group.main.name
+  origin_host_header          = azurerm_storage_account.storage[0].primary_blob_host
+  is_http_allowed             = true
+  is_https_allowed            = true
+  querystring_caching_behaviour = "IgnoreQueryString"
+
+  origin {
+    name      = "storage-origin"
+    host_name = azurerm_storage_account.storage[0].primary_blob_host
+    https_port = 443
+  }
+}
+
+# Local variable to define container names
+locals {
+  container_names = [
+    "${var.tenant}${var.environment}storage",
+    "${var.tenant}${var.environment}-db",
+    "znode10",
+    "z10-container",
+    "z10-payment",
+    "z10-plugin",
+    "z10-data",
+    "z10-resources"
+  ]
+}
+
+# Storage Containers
+resource "azurerm_storage_container" "container" {
+  count                 = length(local.container_names)
+  name                  = local.container_names[count.index]
+  storage_account_name  = azurerm_storage_account.storage[0].name
+  container_access_type = "container"
+}
+
+
+# SQL Server with Elastic Pool and Databases
+resource "azurerm_mssql_server" "sql" {
+  count                        = var.deploy_sql ? 1 : 0
+  name                         = "db-${var.tenant}-${var.environment}-sql-ep"
+  resource_group_name          = azurerm_resource_group.main.name
+  location                     = var.location
+  administrator_login          = var.sql_admin_username
+  administrator_login_password = var.sql_admin_password
+  version                      = "12.0"
+}
+
+# Firewall rule to allow Azure services to access the SQL Server
+resource "azurerm_mssql_firewall_rule" "allow_azure_services" {
+  count      = var.deploy_sql ? 1 : 0
+  name       = "AllowAzureServices"
+  server_id  = azurerm_mssql_server.sql[0].id
+  start_ip_address = "0.0.0.0"
+  end_ip_address   = "0.0.0.0"
+}
+# Elastic Pool with General Purpose Tier
+resource "azurerm_mssql_elasticpool" "elastic_pool" {
+  name                = "${var.tenant}-${var.environment}-elasticpool"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  server_name         = azurerm_mssql_server.sql[0].name
+
+  sku {
+    name     = "GP_Gen5"  # Set to General Purpose with Gen5 family
+    tier     = "GeneralPurpose"
+    family   = "Gen5"
+    capacity = 2          # Adjust the vCore as per requirements
+  }
+
+  max_size_gb = 50        # Set minimum size for General Purpose
+
+  # Required per_database_settings block
+  per_database_settings {
+    min_capacity = 0
+    max_capacity = 2  # Matches your elastic pool setup requirements
+  }
+}
+
+# SQL Database: wbst_z10 with Elastic General Purpose
+resource "azurerm_mssql_database" "wbst_database" {
+  count           = var.deploy_sql ? 1 : 0
+  name            = "wbst_z10_${var.tenant}${var.environment}"
+  server_id       = azurerm_mssql_server.sql[0].id
+  elastic_pool_id = azurerm_mssql_elasticpool.elastic_pool.id
+  sku_name        = "ElasticPool"  # Use ElasticPool SKU to match the elastic pool
+}
+
+# SQL Databases: hgfr_z10, pymt_z10, rceg_z10, pymt_mngr with Elastic General Purpose
+resource "azurerm_mssql_database" "basic_databases" {
+  count               = 4
+  name                = "${element(["hgfr_z10", "pymt_z10", "rceg_z10", "pymt_mngr_z10"], count.index)}_${var.tenant}${var.environment}"
+  server_id           = azurerm_mssql_server.sql[0].id
+  elastic_pool_id     = azurerm_mssql_elasticpool.elastic_pool.id
+  sku_name            = "ElasticPool"  # Use ElasticPool SKU to match the elastic pool
+}

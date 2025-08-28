@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    znodekube.version: "10.0"
+  labels:
+    app: znode10xwebstore-app
+  name: znode10xwebstore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: znode10xwebstore-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+        znodekube.version: "10.0"
+      labels:
+        network/znode10xapinetworkexternal: "true"
+        app: znode10xwebstore-app
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: agentpool
+                    operator: In
+                    values:
+                      - znode10upl
+      imagePullSecrets:
+        - name: knoxdevacr
+      containers:
+        - envFrom:
+            - configMapRef:
+                name: znode10xwebstore
+          imagePullPolicy: Always
+          name: znode10xwebstore
+          image: knoxdevacr.azurecr.io/znode10webstore:z10-knoxdev
+          ports:
+            - containerPort: 443
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /app/ssl
+              readOnly: true
+          resources:
+            requests:
+              memory: 3000Mi
+              cpu: 1200m
+            limits:
+              memory: 3500Mi
+              cpu: 1650m
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: amla-ssl-secret
+status: {}

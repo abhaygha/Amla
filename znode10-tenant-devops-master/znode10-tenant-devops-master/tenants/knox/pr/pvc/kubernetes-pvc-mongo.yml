@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+  - ReadWriteMany
+  azureFile:
+    secretName: znode10storage
+    shareName: z10-mongofileshare
+    readOnly: false
+  # mountOptions:
+# - dir_mode=0777
+# - file_mode=0777
+# - uid=1000
+# - gid=1000
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: ""

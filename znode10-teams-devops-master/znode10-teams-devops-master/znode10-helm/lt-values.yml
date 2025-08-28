@@ -1,0 +1,17 @@
+global:
+
+  newrelic:
+    enabled: true
+    licensekey: ""
+
+resources:
+  znode10xwebstore:
+    configmap:
+      ENABLE_REAL_TIME_PRICING: 'false'
+
+  znode10xutility:
+    configmap:
+      DB_USER: "admin-sv-db-znode10x-lt"
+      DB_PASSWORD: "ltJR_WJ@9#704"
+      DB_SERVER: "sql-z10-lt-ep.database.windows.net"
+      DB_NAME: "wbst_z10_lt"

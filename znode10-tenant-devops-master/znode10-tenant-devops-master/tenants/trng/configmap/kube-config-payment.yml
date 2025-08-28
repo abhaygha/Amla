@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: znode10xpayment-config
+data:
+  TZ: "EST"
+  ASPNETCORE_HTTPS_PORT: "https://+:443"
+  ASPNETCORE_Kestrel__Certificates__Default__Password: "Amla@987"
+  ASPNETCORE_Kestrel__Certificates__Default__Path: "/app/pfx/amla.io.pfx"
+  ASPNETCORE_URLS: "https://+:443"
+  ASPNETCORE_CULTURE: "en_US.UTF-8"
+  ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+  appsettings__ZnodePrivateKey: "432915F1-17ee-d018-a005-a14-61be3e94a83e"
+  appsettings__ValidateAuthHeader: "false"
+  ConnectionStrings__znode_multifront_paymentEntities: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=pymt_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.znode:27017/Znode_10xFeature_Docker_LogMessage"
+  appsettings__CORSDomains: "https://api.znode10training.com,https://admin.znode10training.com,https://hardware.znode10training.com,https://academy-store-preview.znode10training.com,https://academy-store.znode10training.com,https://hardware-preview-znode10training.com,https://api.znode10training.com,https://admin.znode10training.com,https://hardware-znode10training.com,https://webstore-intapi-automation-10x-znode.amla.io,https://webstore-int-automation-10x-znode.amla.io,https://apistore-automation-10x-znode.amla.io,https://teststore-automation-10x-znode.amla.io,https://teststore1-automation-10x-znode.amla.io,https://teststore2-automation-10x-znode.amla.io,https://teststore3-automation-10x-znode.amla.io,https://teststore4-automation-10x-znode.amla.io,https://teststore5-automation-10x-znode.amla.io,https://teststore6-automation-10x-znode.amla.io,https://teststore7-automation-10x-znode.amla.io,https://teststore8-automation-10x-znode.amla.io,https://teststore9-automation-10x-znode.amla.io,https://teststore10-automation-10x-znode.amla.io,https://preview-teststore6-automation-10x-znode.amla.io,https://preview-webstore-int-automation-10x-znode.amla.io,https://teststore11-automation-10x-znode.amla.io,https://teststore12-automation-10x-znode.amla.io,https://teststore13-automation-10x-znode.amla.io,https://preview-teststore13-automation-10x-znode.amla.io,https://teststore14-automation-10x-znode.amla.io,https://teststore15-automation-10x-znode.amla.io,https://teststore16-automation-10x-znode.amla.io,https://teststore17-automation-10x-znode.amla.io,https://teststore18-automation-10x-znode.amla.io,https://teststore19-automation-10x-znode.amla.io,https://hardware1.znode10training.com,https://hardware1-preview.znode10training.com,https://apigateway.znode10training.com"
+  appsettings__AzureBlobKeys__EnableBlobConfiguration: "true"
+  appsettings__AzureBlobKeys__containerKey:  "z10-payment"
+  appsettings__AzureBlobKeys__connectionString: "DefaultEndpointsProtocol=https;AccountName=trngdev;AccountKey=OjbYiKKSTJ/ezLCHxP+9aiSr+FrcR5qUMeXhEdy3A9ZPe3K5HgjULDOi2JNSyqe1t649GkCQb5WZ+AStF+PQKw==;EndpointSuffix=core.windows.net"
+    

@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    znodekube.version: "10.0"
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    # service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "snet-aks-etna-pr-1"
+  creationTimestamp: null
+  labels:
+    service: znode10xpluginbraintree
+  name: znode10xpluginbraintree
+spec:
+  ports:
+  - name: "pluginbraintreehttpsport"
+    port: 80
+    targetPort: 80
+  type: ClusterIP
+  selector:
+    service: znode10xpluginbraintree
+---
+
+

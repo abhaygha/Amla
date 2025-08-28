@@ -1,0 +1,31 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  annotations:
+    znodekube.version: "10.0"
+  name: znode10xpagebuilder-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: znode10xpagebuilder
+  minReplicas: 1
+  maxReplicas: 1
+  metrics:
+  - type: ContainerResource
+    containerResource:
+      name: cpu
+      container: znode10xpagebuilder
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: ContainerResource
+    containerResource:
+      name: memory
+      container: znode10xpagebuilder
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+
+

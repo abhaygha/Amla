@@ -1,0 +1,24 @@
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kompose.cmd: C:\ProgramData\chocolatey\lib\kubernetes-kompose\tools\kompose.exe convert -f docker-compose-resolved.yml -o kube-compose.yml
+    kompose.version: 1.28.0 (c4137012e)
+  creationTimestamp: null
+  labels:
+    service: znode10xpayment
+  name: znode10xpayment
+spec:
+  ports:
+    - name: "443"
+      port: 443
+      targetPort: 443
+  type: LoadBalancer
+  selector:
+    service: znode10xpayment
+status:
+  loadBalancer: {}
+
+---

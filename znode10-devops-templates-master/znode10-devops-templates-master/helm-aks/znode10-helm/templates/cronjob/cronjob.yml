@@ -1,0 +1,30 @@
+{{- if and .Values.scheduler (eq .Values.scheduler.enabled true) }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: znode10x-restart-scheduler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: znode10x
+spec:
+  schedule: "{{ .Values.scheduler.schedule }}"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: znode-cronjob-sa
+          restartPolicy: Never
+          containers:
+            - name: restarter
+              image: bitnami/kubectl:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  for d in {{ join " " .Values.scheduler.targetDeployments }}; do
+                    echo "Restarting deployment: $d"
+                    kubectl rollout restart deployment $d -n {{ .Release.Namespace }}
+                    echo "Sleeping for 3 minutes before next restart..."
+                    sleep 180
+                  done
+{{- end }}

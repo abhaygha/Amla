@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: redirect-etnasupply
+  namespace: znode
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/permanent-redirect: 'https://www.etnasupply.com/'
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - etnasupply.com
+      secretName: etnasupply-tls-secret
+  rules:
+    - host: etnasupply.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: znode10xwebstore
+                port:
+                  number: 443

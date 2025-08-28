@@ -1,0 +1,22 @@
+﻿--- 
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    znodekube.version: "10.0"
+  creationTimestamp: null
+  labels:
+    service: znode10xapiv2
+  name: znode10xapiv2
+spec:
+  ports:
+    - name: "443"
+      port: 443
+      targetPort: 443 
+  selector:
+    service: znode10xapiv2
+  type: LoadBalancer
+
+status:
+  loadBalancer: {}
+---

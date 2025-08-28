@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: znode10xapigateway-cp-config
+data:
+  TZ: "America/New_York"
+  ASPNETCORE_HTTPS_PORT: "https://+:443"
+  ASPNETCORE_Kestrel__Certificates__Default__Password: "Amla@987"
+  ASPNETCORE_Kestrel__Certificates__Default__Path: "/app/pfx/amla.io.pfx"
+  ASPNETCORE_URLS: "https://+:443;http://+:80"
+  ASPNETCORE_CULTURE: "en_US.UTF-8"
+  ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+  AuthKeys__AuthRootUri: "api-z10-sandbox.amla.io"
+  AuthKeys__JWTEncryptionKey: "qwertyqwertyqwer"
+  AuthKeys__JWTSigningKey: "ynsblmdqvrtfeqdhdajiiulzqrhmoamyxfydfphhmwzfcrtzowvhmtzfszitqjmdxjzldvsrbvlnfhrgnsnoxqhoalnlfjbygcan"
+  AuthKeys__JWTExpirySpan: "20"
+  AuthKeys__Issuer: "apigateways-cp-z10-sandbox.amla.io"
+  AuthKeys__Audience: "https://api-cp-z10-sandbox.amla.io"
+  ZnodeTokenization__EnableTokenization: "true"
+  ZnodeTokenization__APIGatewayDomainName: "api-z10-sandbox.amla.io"
+  ZnodeTokenization__APIGatewayDomainKey: "a2c32d26-fb56-4e2d-aa44-10ae401a0970"
+  MicroServices__cpapi: "https://apigateways-cp-z10-sandbox.amla.io"
+  MicroServices__znodeapi: "https://apigateways-z10-sandbox.amla.io"
+  

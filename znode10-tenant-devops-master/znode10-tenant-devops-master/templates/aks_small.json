@@ -1,0 +1,200 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "znode10_aks_cluster_name": {
+            "type": "string",
+            "metadata": {
+                "description": "New cluster name"
+            }
+        },
+        "location": {
+            "type": "string",
+            "metadata": {
+                "description": "location name"
+            }
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.ContainerService/managedClusters",
+            "apiVersion": "2023-08-02-preview",
+            "name": "[parameters('znode10_aks_cluster_name')]",
+            "location": "[parameters('location')]",
+            "sku": {
+                "name": "Base",
+                "tier": "Standard"
+            },
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "kubernetesVersion": "1.28.5",
+                "dnsPrefix": "[concat(parameters('znode10_aks_cluster_name'), '-dns')]",
+                "agentPoolProfiles": [
+                    {
+                        "name": "znode10upl",
+                        "count": 3,
+                        "vmSize": "Standard_B4s_v2",
+                        "osDiskSizeGB": 128,
+                        "osDiskType": "Managed",
+                        "kubeletDiskType": "OS",
+                        "maxPods": 30,
+                        "type": "VirtualMachineScaleSets",
+                        "availabilityZones": [
+                            "1"
+                        ],
+                        "maxCount": 20,
+                        "minCount": 1,
+                        "enableAutoScaling": true,
+                        "scaleDownMode": "Delete",
+                        "powerState": {
+                            "code": "Running"
+                        },
+                        "orchestratorVersion": "1.28.5",
+                        "enableNodePublicIP": false,
+                        "tags": {
+                            "znode10upl": "znode10upl"
+                        },
+                        "mode": "User",
+                        "osType": "Linux",
+                        "osSKU": "Ubuntu",
+                        "upgradeSettings": {},
+                        "enableFIPS": false,
+                        "securityProfile": {
+                            "sshAccess": "LocalUser"
+                        }
+                    },
+                    {
+                        "name": "znode10apl",
+                        "count": 2,
+                        "vmSize": "Standard_B4s_v2",
+                        "osDiskSizeGB": 128,
+                        "osDiskType": "Managed",
+                        "kubeletDiskType": "OS",
+                        "maxPods": 30,
+                        "type": "VirtualMachineScaleSets",
+                        "maxCount": 30,
+                        "minCount": 1,
+                        "enableAutoScaling": true,
+                        "scaleDownMode": "Delete",
+                        "powerState": {
+                            "code": "Running"
+                        },
+                        "orchestratorVersion": "1.28.5",
+                        "enableNodePublicIP": false,
+                        "tags": {
+                            "znode10apl": "znode10apl"
+                        },
+                        "mode": "System",
+                        "osType": "Linux",
+                        "osSKU": "Ubuntu",
+                        "upgradeSettings": {},
+                        "enableFIPS": false,
+                        "securityProfile": {
+                            "sshAccess": "LocalUser"
+                        }
+                    }
+                ],
+                "servicePrincipalProfile": {
+                    "clientId": "msi"
+                },
+                "addonProfiles": {
+                    "azureKeyvaultSecretsProvider": {
+                        "enabled": false
+                    },
+                    "azurepolicy": {
+                        "enabled": true
+                    }
+                },
+                "enableRBAC": true,
+                "supportPlan": "KubernetesOfficial",
+                "networkProfile": {
+                    "networkPlugin": "azure",
+                    "networkPolicy": "calico",
+                    "networkDataplane": "azure",
+                    "loadBalancerSku": "Standard",
+                    "loadBalancerProfile": {
+                        "managedOutboundIPs": {
+                            "count": 1
+                        },
+                        "backendPoolType": "nodeIPConfiguration"
+                    },
+                    "serviceCidr": "10.0.0.0/16",
+                    "dnsServiceIP": "10.0.0.10",
+                    "outboundType": "loadBalancer",
+                    "serviceCidrs": [
+                        "10.0.0.0/16"
+                    ],
+                    "ipFamilies": [
+                        "IPv4"
+                    ]
+                },
+                "autoScalerProfile": {
+                    "balance-similar-node-groups": "false",
+                    "daemonset-eviction-for-empty-nodes": false,
+                    "daemonset-eviction-for-occupied-nodes": true,
+                    "expander": "random",
+                    "expanders": [
+                        "random"
+                    ],
+                    "ignore-daemonsets-utilization": false,
+                    "max-empty-bulk-delete": "10",
+                    "max-graceful-termination-sec": "600",
+                    "max-node-provision-time": "15m",
+                    "max-total-unready-percentage": "45",
+                    "new-pod-scale-up-delay": "0s",
+                    "ok-total-unready-count": "3",
+                    "scale-down-delay-after-add": "10m",
+                    "scale-down-delay-after-delete": "10s",
+                    "scale-down-delay-after-failure": "3m",
+                    "scale-down-unneeded-time": "10m",
+                    "scale-down-unready-time": "20m",
+                    "scale-down-utilization-threshold": "0.5",
+                    "scan-interval": "10s",
+                    "skip-nodes-with-local-storage": "false",
+                    "skip-nodes-with-system-pods": "true"
+                },
+                "autoUpgradeProfile": {
+                    "upgradeChannel": "patch",
+                    "nodeOSUpgradeChannel": "NodeImage"
+                },
+                "disableLocalAccounts": false,
+                "securityProfile": {},
+                "storageProfile": {
+                    "diskCSIDriver": {
+                        "enabled": true,
+                        "version": "v1"
+                    },
+                    "fileCSIDriver": {
+                        "enabled": true
+                    },
+                    "snapshotController": {
+                        "enabled": true
+                    },
+                    "blobCSIDriver": {
+                        "enabled": true
+                    }
+                },
+                "oidcIssuerProfile": {
+                    "enabled": false
+                },
+                "workloadAutoScalerProfile": {},
+                "azureMonitorProfile": {
+                    "metrics": {
+                        "enabled": true,
+                        "kubeStateMetrics": {}
+                    }
+                },
+                "metricsProfile": {
+                    "costAnalysis": {
+                        "enabled": false
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {},
+    "functions": []
+}

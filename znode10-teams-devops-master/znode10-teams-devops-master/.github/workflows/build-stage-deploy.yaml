@@ -1,0 +1,297 @@
+name: Build and Deploy Services
+
+on:
+  workflow_call:
+    inputs:
+      tenant:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      branch:
+        required: true
+        type: string
+      all:
+        required: false
+        type: boolean
+        default: false
+      services:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+        default: znode
+      triggered_by:
+        required: false
+        type: string
+
+jobs:
+  parse_services:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+      services_list: ${{ steps.set.outputs.services_list }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Generate Matrix
+        id: set
+        run: |
+          ALL='${{ inputs.all }}'
+          INPUT_SERVICES='${{ inputs.services }}'
+          SELECTED=$(echo "$INPUT_SERVICES" | jq -r 'to_entries[] | select(.value == true) | .key' | tr '\n' ',')
+          KEYS=$(jq -n --arg selected "$SELECTED" '$selected | split(",")')
+          CONFIG=$(cat .github/services-config.json)
+
+          if [[ "$ALL" == "true" ]]; then
+            FINAL="$CONFIG"
+          else
+            FINAL=$(echo "$CONFIG" | jq --argjson keys "$KEYS" '[.[] | select(.service as $s | $keys | index($s))]')
+          fi
+
+          COUNT=$(echo "$FINAL" | jq 'length')
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ No services selected or matched. Skipping build."
+            echo "matrix=[]" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Found $COUNT services to build"
+            echo "matrix=$(echo "$FINAL" | jq -c)" >> $GITHUB_OUTPUT
+            echo "services_list=$SELECTED" >> $GITHUB_OUTPUT
+          fi
+
+  build_services:
+    if: ${{ (inputs.environment == 'st' && inputs.branch == 'master') || (inputs.environment == 'np' && contains(inputs.branch, 'hotfix')) }}
+    needs: parse_services
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.parse_services.outputs.matrix) }}
+    uses: ./.github/workflows/build-stage-service.yaml
+    with:
+      service: ${{ matrix.service }}
+      environment: ${{ inputs.environment }}
+      repository: ${{ matrix.repository }}
+      ref: ${{ inputs.branch }}
+      working_directory: ${{ matrix.working_directory }}
+      compose_file: ${{ matrix.compose_file }}
+      acr_server: ${{ vars.Z10ST_ACR_SERVER }}
+    secrets:
+      access_token: ${{ secrets.ACCESS_REPO }}
+      acr_username: ${{ secrets.Z10ST_ACR_UN }}
+      acr_password: ${{ secrets.Z10ST_ACR_PW }}
+
+  build_services_qa:
+    if: ${{ (inputs.environment == 'st' && inputs.branch == 'master') || (inputs.environment == 'np' && contains(inputs.branch, 'hotfix')) }}
+    needs: parse_services
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.parse_services.outputs.matrix) }}
+    uses: ./.github/workflows/build-stage-service.yaml
+    with:
+      service: ${{ matrix.service }}
+      environment: ${{ inputs.environment }}
+      repository: ${{ matrix.repository }}
+      ref: ${{ inputs.branch }}
+      working_directory: ${{ matrix.working_directory }}
+      compose_file: ${{ matrix.compose_file }}
+      acr_server: ${{ vars.Z10ST_ACR_SERVER }}
+    secrets:
+      access_token: ${{ secrets.ACCESS_REPO }}
+      acr_username: ${{ secrets.Z10ST_ACR_UN }}
+      acr_password: ${{ secrets.Z10ST_ACR_PW }}
+
+  qa-acr-sync:
+    name: QA ACR Sync with NP ACR
+    runs-on: ubuntu-latest
+    needs: build_services_qa
+    if: ${{ inputs.environment == 'qa' }}
+    steps:
+      - name: Trigger ACR Sync workflow in other repo
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.ACCESS_REPO }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/MRRSoft/znode10-tenant-devops/actions/workflows/sync-acr-to-central-india-acr.yml/dispatches \
+            -d '{
+              "ref": "master",
+              "inputs": {
+                "source_acr": "acrz10qa",
+                "destination_acr": "acrz10np",
+                "syncqaimage": "true",
+                "syncstageimage": "false",
+                "syncsanboximage": "false"
+              }
+            }'
+
+  deploy_helm:
+    name: Deploy Znode10x Helm Chart
+    runs-on: [self-hosted, 100.195]
+    environment: ${{ inputs.environment }}
+    needs:
+      - parse_services
+      - build_services
+      - build_services_qa
+    if: |
+      always() &&
+      needs.parse_services.result == 'success' &&
+      (
+        needs.build_services.result == 'success' ||
+        needs.build_services_qa.result == 'success'
+      )
+
+    steps:
+      - name: Checkout Teams Repo with Submodules
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          submodules: recursive
+          token: ${{ secrets.ACCESS_REPO }}
+
+      - name: Update submodule to latest master
+        run: git submodule update --remote --checkout --recursive
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.2
+
+      - name: Helm install znode10 chart
+        working-directory: ./znode10-helm/znode-templates/helm-aks/znode10-helm
+        run: |
+          echo "Deploying to environment: ${{ inputs.tenant }}${{ inputs.environment }}"
+          echo '${{ vars.IMAGE_TAGS }}' > image_tags.json
+          set_args=""
+          for service in $(jq -r 'keys[]' image_tags.json); do
+            tag=$(jq -r --arg svc "$service" '.[$svc]' image_tags.json)
+            if [[ -n "$tag" && "$tag" != "null" ]]; then
+              echo "✅ Using provided tag for $service: $tag"
+            else
+              current_image=$(kubectl get deployment $service -n ${{ inputs.namespace }} -o jsonpath='{.spec.template.spec.containers[0].image}' || true)
+              if [[ -n "$current_image" ]]; then
+                current_tag=$(echo "$current_image" | awk -F':' '{print $2}')
+                tag="$current_tag"
+              else
+                echo "❌ ERROR: Deployment for $service not found. Cannot continue."
+                exit 1
+              fi
+            fi
+            set_args="$set_args --set-string resources.$service.image.tag=$tag"
+          done
+
+          helm upgrade --install znode10x . \
+            --namespace ${{ inputs.namespace }} \
+            -f default-values.yml \
+            -f internal-values.yml \
+            -f ../../../../znode10-helm/${{ inputs.environment }}-values.yml \
+            -f ingress-values.yml \
+            -f ${{ vars.CATEGORY }}-values.yml \
+            --set global.tenant=${{ inputs.tenant }} \
+            --set global.environment=${{ inputs.environment }} \
+            --set global.domain=${{ vars.URL }} \
+            --set global.webstoreURL=${{ vars.WEBSTORE_URL }} \
+            --set global.imageRegistry=${{ vars.ACR_SERVER }} \
+            --set global.imagePullSecrets=${{ vars.BLACKBOX }} \
+            --set global.tenantacr.imageRegistry=${{ vars.TENANT_ACR_SERVER }} \
+            --set global.clusterType=${{ vars.CLUSTER_TYPE }} \
+            --set global.ingressClassName=nginx \
+            --set-string global.db.wbst_db='${{ secrets.DB_WBST }}' \
+            --set-string global.db.pymt_db='${{ secrets.DB_PYMT }}' \
+            --set-string global.db.hgfr_db='${{ secrets.DB_HGFR }}' \
+            --set-string global.db.rceg_db='${{ secrets.DB_RCEG }}' \
+            --set-string storage.name="${{ secrets.STORAGE_NAME }}" \
+            --set-string storage.url="https://${{ secrets.STORAGE_NAME }}.blob.core.windows.net" \
+            --set-string storage.connection_string="${{ secrets.STORAGE_CONN }}" \
+            --set-string global.newrelic.licensekey="${{ vars.NEWRELIC_KEY }}" \
+            --set-string global.key.domainkey="${{ vars.DOMAIN_KEY }}" \
+            $set_args
+
+      - name: Conditional rollout restart for Selected Deployments
+        run: |
+          echo "Restarting deployments for selected services..."
+          SERVICE_LIST="${{ needs.parse_services.outputs.services_list }}"
+          if [[ -z "$SERVICE_LIST" ]]; then
+            echo "⚠️ No services_list output found. Skipping rollout restart."
+            exit 0
+          fi
+          IFS=',' read -ra SERVICES <<< "$SERVICE_LIST"
+          for svc in "${SERVICES[@]}"; do
+            case "$svc" in
+              api) DEP="znode10xapi" ;;
+              v2) DEP="znode10xapiv2" ;;
+              admin) DEP="znode10xadmin" ;;
+              pgbld) DEP="znode10xpagebuilder" ;;
+              wbst) DEP="znode10xwebstore" ;;
+              gateway) DEP="znode10xapigateways" ;;
+              customtable) DEP="znode10xcustomtable" ;;
+              a-commerce) DEP="znode10xapicp" ;;
+              portal) DEP="znode10xcp" ;;
+              cstm) DEP="znode10customapi" ;;
+              paymngr) DEP="znode10xpaymentmanager" ;;
+              spreedly) DEP="znode10xpluginspreedly" ;;
+              braintree) DEP="znode10xpluginbraintree" ;;
+              reports) DEP="znode10xreports" ;;
+              shipping) DEP="znode10xshippingmanager" ;;
+              fedex) DEP="znode10xpluginfedex" ;;
+              ups) DEP="znode10xpluginups" ;;
+              azfunction) DEP="znode10xazfunctions" ;;
+              graphqlapi) DEP="znode10xgraphqlapi" ;;
+              taxmanager) DEP="znode10xtaxmanager" ;;
+              avatax) DEP="znode10xavatax" ;;
+              diagno) DEP="znode10xdiagnostic" ;;
+              python) DEP="znode10xutility" ;;
+              cc-api) DEP="znode10xcommerceconnectorapi" ;;   
+              cc-admin) DEP="znode10xcommerceconnectoradmin" ;;           
+              *) echo "⚠️ Unknown service key: $svc. Skipping."; continue ;;
+            esac
+            echo "🔁 Rolling out restart for deployment: $DEP"
+            kubectl rollout restart deployment "$DEP" -n ${{ inputs.namespace }}
+          done
+
+      - name: Notify Google Chat
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          COLOR="🟡"
+          if [[ "$STATUS" == "success" ]]; then COLOR="🟢"; elif [[ "$STATUS" == "failure" ]]; then COLOR="🔴"; fi
+
+          URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TRIGGERED_BY="${{ inputs.triggered_by || github.triggering_actor }}"
+          SERVICE_LIST_RAW="${{ needs.parse_services.outputs.services_list }}"
+          
+          if [[ -z "$SERVICE_LIST_RAW" ]]; then
+            DEPLOYED_SERVICES="N/A"
+          else
+            IFS=',' read -ra ITEMS <<< "$SERVICE_LIST_RAW"
+            DEPLOYED_SERVICES=$(printf '\n- `%s`' "${ITEMS[@]}")
+          fi
+
+          MESSAGE="${COLOR} *Build & Deploy Status:* \`$STATUS\`\n*Environment:* \`${{ inputs.environment }}\`\n*Tenant:* \`${{ inputs.tenant }}\`\n*Branch:* \`${{ inputs.branch }}\`\n*Triggered By:* \`$TRIGGERED_BY\`\n*Deployed Services:*${DEPLOYED_SERVICES}\n[🔗 View Workflow Run]($URL)"
+
+          curl -X POST -H 'Content-Type: application/json' \
+            -d "{\"text\": \"$MESSAGE\"}" \
+            "${{ vars.ALERTS }}"
+
+      # - name: Notify Google Chat
+      #   if: always()
+      #   run: |
+      #     STATUS="${{ job.status }}"
+      #     COLOR="🟡"
+      #     if [[ "$STATUS" == "success" ]]; then COLOR="🟢"; elif [[ "$STATUS" == "failure" ]]; then COLOR="🔴"; fi
+      #     URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      #     TRIGGERED_BY="${{ inputs.triggered_by || github.triggering_actor }}"
+      #     MESSAGE="${COLOR} *Build & Deploy Status:* \`$STATUS\`\n*Environment:* \`${{ inputs.environment }}\`\n*Tenant:* \`${{ inputs.tenant }}\`\n*Branch:* \`${{ inputs.branch }}\`\n*Triggered By:* \`$TRIGGERED_BY\`\n[🔗 View Workflow Run]($URL)"
+      #     curl -X POST -H 'Content-Type: application/json' -d "{\"text\": \"$MESSAGE\"}" "${{ vars.ALERTS }}"

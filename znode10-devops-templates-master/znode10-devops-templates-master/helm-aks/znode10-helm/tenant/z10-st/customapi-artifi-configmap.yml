@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: customapi-artifi-configmap
+  labels:
+    io.znodekube.service: znode10customapi-artifi
+    service: znode10customapi-artifi
+data:
+  ASPNETCORE_HTTPS_PORT: "http://+:80"
+  ASPNETCORE_URLS: "http://+:80"
+  Caching__RedisCacheConnectionString: "redisapi-headless.znode:26379,serviceName=mymaster,allowAdmin=True"
+  Caching__Type: "Redis"
+  ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.znode:27017/Znode_10xFeature_Docker_LogMessage"
+  EventBus__RabbitMQConnectionString: "amqp://guest:guest@znode10xrabbitmq.znode:5672"
+  EventBus__RabbitMQManagementUrl: "http://znode10xrabbitmq.znode:15672"
+  TZ: "America/New_York"
+  appsetting__ZnodeAdminURLCorsPolicy: "https://admin-z10-stage.amla.io,https://localhost:44392"
+  appsettings__EnableTokenBasedAuthorization: "false"
+  appsettings__IsGlobalAPIAuthorization: "true"
+  appsettings__PluginApiRootUri: "https://pluginserver.com"
+  appsettings__ZnodeApiDomainKey: "a2c32d26-fb56-4e2d-aa44-10ae401a0970"
+  appsettings__ZnodeApiDomainName: "api-z10-stage.amla.io"
+  appsettings__ZnodeApiGateway: "http://znode10xapigateways.znode.svc.cluster.local"
+  appsettings__ZnodeApiRootUri: "http://znode10xapi.znode.svc.cluster.local"
+  appsettings__ZnodeCorsAllowedURLS: "https://webstore-artifiznode-qa.amla.io,https://znode10xapicp.znode.svc.cluster.local,https://admin-z10-stage.amla.io"

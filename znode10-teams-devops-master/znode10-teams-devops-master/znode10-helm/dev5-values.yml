@@ -1,0 +1,39 @@
+global:
+  timezone: Asia/Kolkata
+
+resources:
+  znode10xadmin:
+    configmap:
+      appsettings__IsLocalEnvironment: "true"
+
+  znode10xapi:
+    configmap:
+      appsettings__IsLocalEnvironment: "true"
+      appsettings__ZnodeCommercePortalRootUri: http://znode10xapicp.znode.svc.cluster.local
+
+  znode10xcustomtable:
+    configmap:
+      appsettings__IsLocalEnvironment: "true"
+
+  znode10xwebstore:
+    configmap:
+      REDIS_SENTINEL_ENABLED: "true"
+
+multiwebIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret
+    services:
+    - webstore-multistore
+
+  rules:
+    - name: webstore-multistore
+      serviceName: znode10xwebstore
+      servicePort: 443  # change to 80 if internal service doesn't expose 443
+      paths:
+        - path: /
+          pathType: Prefix
+
+  znode10xutility:
+    configmap: 
+      DB_NAME: "z10_wbst_dev5"

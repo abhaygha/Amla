@@ -1,0 +1,489 @@
+name: Sandbox Deployment
+
+on:
+
+ #Triggers the workflow every sunday at 19:30 UTC and 1 AM IST
+  workflow_dispatch:
+
+    inputs:
+       environment:
+        description: 'The target environment for deployment'
+        required: true
+        type: choice
+        options:
+          - sandbox
+  
+       services:
+        description: 'Deploy Applications (Set the following values to true)'
+        required: false
+        default: '{"wbst": false, "pgbld": false, "admin": false, "api": false, "gateway": false, "customtable": false, "v2": false, "a-commerce": false, "getcp": false, "portal": false, "cstm": false, "paymngr": false, "spreedly": false, "braintree": false, "reports": false, "azfunction": false }'
+        type: string
+
+
+jobs: 
+
+  parse_services:
+    runs-on: ubuntu-latest
+    outputs:
+      services_list: ${{ steps.set_services.outputs.services_list }}
+    steps:
+      - name: Parse services JSON
+        id: set_services
+        run: |
+          SERVICES=$(echo '${{ github.event.inputs.services }}' | jq -r 'to_entries[] | select(.value == true) | .key' | paste -sd "," -)
+          echo "::set-output name=services_list::${SERVICES}"
+
+      - name: Debug services list
+        run: |
+          echo "Services list: ${{ steps.set_services.outputs.services_list }}"
+
+  webstore_deploy:
+    name: Deploy QA Webstore Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'wbst') || github.event.inputs.all == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for Webstore
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-webstore-config.yml -n znode
+
+      - name: Apply and Restart Webstore
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-webstore.yml --record -n znode
+          kubectl rollout restart deployment znode10xwebstore -n znode
+
+  # payment_deploy:
+  #   name: Deploy QA Payment Image
+  #   runs-on: ubuntu-latest
+  #   environment: ${{ github.event.inputs.environment }}    
+  #   needs: parse_services
+  #   if: contains(needs.parse_services.outputs.services_list, 'pymnt') || github.event.inputs.all == 'true'    
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v2
+  #       with:
+  #         ref: master
+
+  #     - name: Kubernetes Set up
+  #       uses: azure/k8s-set-context@v1
+  #       with:
+  #         kubeconfig: ${{ secrets.KUBECONFIG }}
+  #         version: '1.19.9'
+
+  #     - name: Apply Configmap for Payment
+  #       working-directory: tenants/sandbox/configmap
+  #       run: kubectl apply -f kube-config-payment.yml -n znode
+
+  #     - name: Apply and Restart Payment
+  #       working-directory: tenants/sandbox/deploy/app/pods/
+  #       run: |
+  #         kubectl apply -f kube-deploy-payment.yml --record -n znode
+  #         kubectl rollout restart deployment znode10xpayment -n znode
+
+  admin_deploy:
+    name: Deploy QA Admin Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'admin') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for Admin
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-admin-config.yml -n znode
+
+      - name: Apply and Restart Admin
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-admin.yml --record -n znode
+          kubectl rollout restart deployment znode10xadmin -n znode
+
+  api_deploy:
+    name: Deploy QA API Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'api') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for API
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-api-config.yml -n znode
+
+      - name: Apply and Restart API
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-api.yml --record -n znode
+          kubectl rollout restart deployment znode10xapi -n znode
+
+  api_v2_deploy:
+    name: Deploy QA API V2 Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'v2') || github.event.inputs.all == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for API V2
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-api-v2-config.yml -n znode
+
+      - name: Apply and Restart API-V2
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-api-v2.yml --record -n znode
+          kubectl rollout restart deployment znode10xapiv2 -n znode
+
+  # Repeat the pattern for the remaining applications:
+  # apigateways, apigateway-cp, api-cp, cp, and custom-api
+
+
+  apicp_deploy:
+    name: Deploy QA APICP Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'a-commerce') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for APICP
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-api-cp-config.yml -n znode
+
+      - name: Apply and Restart APICP
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-api-cp.yml --record -n znode
+          kubectl rollout restart deployment znode10apicp -n znode
+
+  customtable_deploy:
+    name: Deploy QA Customtable Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'customtable') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for Customtable
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-customtable-config.yml -n znode
+
+      - name: Apply and Restart CustomTable
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-customtable.yml --record -n znode
+          kubectl rollout restart deployment znode10xcustomtable -n znode
+
+  customapi_deploy:
+    name: Deploy QA CustomAPI Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'cstm') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for CustomAPI
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-customapi-config.yml -n znode
+
+      - name: Apply and Restart CustomAPI
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-custom-api.yml --record -n znode
+          kubectl rollout restart deployment znode10customapi -n znode
+
+  gateway_deploy:
+    name: Deploy QA Gateway Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'gateway') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for Gateway
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-apigateways-config.yml -n znode
+
+      - name: Apply and Restart Gateway
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-apigateways.yml --record -n znode
+          kubectl rollout restart deployment znode10xapigateways -n znode
+
+  cp_deploy:
+    name: Deploy QA CP Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'portal') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for CP
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-cp-config.yml -n znode
+
+      - name: Apply and Restart CP
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-cp.yml --record -n znode
+          kubectl rollout restart deployment znode10xcp -n znode
+
+  cpgateway_deploy:
+    name: Deploy QA CPGateway Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'getcp') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for CPGateway
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-apigateway-cp-config.yml -n znode
+
+      - name: Apply and Restart CPGateway
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-apigateway-cp.yml --record -n znode
+          kubectl rollout restart deployment znode10xapigateway-cp -n znode
+
+
+  pagebuilder_deploy:
+    name: Deploy QA Pagebuilder Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'pgbld') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for Pagebuilder
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-pagebuilder-config.yml -n znode
+
+      - name: Apply and Restart PageBuilder
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-pagebuilder.yml --record -n znode
+          kubectl rollout restart deployment znode10xpagebuilder -n znode
+
+  plugin_spreedly_deploy:
+    name: Deploy QA Plugin Spreedly Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'spreedly') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for Plugin Spreedly
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-plugin-spreedly-config.yml -n znode
+
+      - name: Apply and Restart Plugin-Spreedly
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-plugin-spreedly.yml --record -n znode
+          kubectl rollout restart deployment znode10xpluginspreedly -n znode
+
+  plugin_braintree_deploy:
+    name: Deploy QA Plugin Braintree Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'braintree') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for Plugin Braintree
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-plugin-braintree-config.yml -n znode
+
+      - name: Apply and Restart Plugin-Braintree
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-plugin-braintree.yml --record -n znode
+          kubectl rollout restart deployment znode10xpluginbraintree -n znode
+
+  payment_manager_deploy:
+    name: Deploy QA Payment Manager Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'paymngr') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap for Payment Manager
+        working-directory: tenants/sandbox/configmap
+        run: kubectl apply -f kube-payment-manager-config.yml -n znode
+
+      - name: Apply and Restart Payment Manager
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-payment-manager.yml --record -n znode
+          kubectl rollout restart deployment znode10xpaymentmanager -n znode
+
+  azfunction_deploy:
+    name: Deploy QA azfunction Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}    
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'azfunction') || github.event.inputs.all == 'true'    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply and Restart Azure Functions
+        working-directory: tenants/sandbox/deploy/app/pods/
+        run: |
+          kubectl apply -f kube-deploy-azfunctions.yml --record -n znode
+          kubectl rollout restart deployment znode10xazfunctions -n znode 
+
+        

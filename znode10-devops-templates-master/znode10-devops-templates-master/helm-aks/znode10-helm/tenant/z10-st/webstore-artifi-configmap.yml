@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webstore-artifi-configmap
+  namespace: znode
+data:
+  API_DOMAIN: "api-z10-stage.amla.io"
+  API_Domain_Key: "a2c32d26-fb56-4e2d-aa44-10ae401a0970"
+  API_KEY: "a2c32d26-fb56-4e2d-aa44-10ae401a0970"
+  API_URL: "http://znode10xapigateways.znode.svc.cluster.local/"
+  API_V2_DOMAIN: "api-v2-z10-stage.amla.io"
+  APP_NAME: "WEBSTORE"
+  CACHE_MEMORY: "REDIS"
+  CONTENT_SECURITY_POLICY: |-
+    script-src blob: 'self' *.hsforms.net *.hsforms.com https://*.paypal.com
+    https://*.paypal.cn https://*.paypalobjects.com https://objects.paypal.cn
+    https://www.recaptcha.net https://www.gstatic.com
+    https://*.synchronycredit.com https://apigateways-z10-stage.amla.io/
+    https://synchronycredit.com https://www.googleadservices.com
+    https://static-na.payments-amazon.com https://payments-amazon.com
+    www.googletagmanager.com https://payments-sandbox.amazon.com
+    https://znode10x.azureedge.net/ http://znode10xapi.znode.svc.cluster.local/
+    https://paymentapi-z10-stage.amla.io/ *.google-analytics.com *.osano.com
+    *.jsdelivr.net *.authorize.net *.cybersource.com *.braintreegateway.com
+    *.googleapis.com 'unsafe-inline' 'unsafe-eval'; connect-src 'self'
+    *.hsforms.net *.hsforms.com https://payments.amazon.com/
+    https://apay-us.amazon.com/ https://payments-sandbox.amazon.com/
+    https://static-na.payments-amazon.com/ https://www.google-analytics.com/
+    https://tattle.api.osano.com/ https://consent.api.osano.com
+    https://znode10x.azureedge.net/ http://znode10xapi.znode.svc.cluster.local/
+    https://paymentapi-z10-stage.amla.io/ https://webstore-artifiznode-qa.amla.io/
+    https://webstore-powertool-z10-stage.amla.io/
+    https://webstore-safetygear-z10-stage.amla.io/
+    https://webstore-prev-hardware-z10-stage.amla.io/
+    https://webstore-prev-powertool-z10-stage.amla.io/
+    https://webstore-prev-safetygear-z10-stage.amla.io/
+    https://webstore-znode10-amazon-stage.amla.io/
+    https://webstore-znode10-prev-amazon-stage.amla.io/
+    https://webstore-artifiznode-qa.amla.io/
+    https://webstore-preview-z10-stage.amla.io/ *.braintreegateway.com
+    *.braintree-api.com *.googleapis.com 'unsafe-inline' 'unsafe-eval'
+  DEFAULT_THEME: "base"
+  ENABLE_CACHE: "true"
+  ENABLE_PAGE_CACHE: "true"
+  IS_301_REDIRECT: "true"
+  IS_INGRESS_ENABLED: "true"
+  LOGGING_METHOD: "API"
+  NEXTAUTH_SECRET: "ABCDEF"
+  NEXTAUTH_URL: "https://webstore-artifiznode-qa.amla.io/"
+  NEXT_PUBLIC_GEO_CODE_URL: "https://maps.googleapis.com/maps/api/geocode/json"
+  NEXT_PUBLIC_GOOGLE_MAP_API_KEY: "AIzaSyDzQcVG1LYGzI8U7IlQwuZcl8S6eSxRLzc"
+  NODE_ENV: "production"
+  NODE_TLS_REJECT_UNAUTHORIZED: "0"
+  NX_DAEMON: "false"
+  NX_DISABLE_DB: "true"
+  PERMISSIONS_POLICY: "camera=(self), fullscreen=(self), geolocation=(self)"
+  PORT: "443"
+  REDIS_CONNECTION_STRING: "redis://rediswebstore.znode:6379"
+  REFERRER_POLICY: "strict-origin-when-cross-origin"
+  STORAGE: "REDIS"
+  STRICT_TRANSPORT_SECURITY: "max-age=31536000; includeSubDomains; preload"
+  TZ: "America/New_York"
+  WEBSTORE_DOMAIN_NAME: "webstore-artifiznode-qa.amla.io"
+  X_CONTENT_TYPE_OPTIONS: "nosniff"

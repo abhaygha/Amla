@@ -1,0 +1,2650 @@
+name: Z10 sandbox Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'The target environment for deployment'
+        required: true
+        type: choice
+        options:
+          - sandbox
+
+      release_type:
+        description: 'major, minor or patch'
+        required: true
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+      branch:
+        description: 'The branch to deploy from'
+        required: true
+        default: 'master'
+
+      trigger_db_deploy:
+        description: 'Deploy Databases'
+        required: false
+        default: false
+        type: boolean
+
+      all:
+        description: 'Build Deploy ALL'
+        required: false
+        default: false
+        type: boolean       
+
+      services:
+        description: 'Deploy Applications (Set the following values to true)'
+        required: false
+        default: '{"wbst": false, "pgbld": false, "admin": false, "api": false, "gateway": false, "customtable": false, "v2": false, "a-commerce": false, "portal": false, "cstm": false, "paymngr": false, "spreedly": false, "braintree": false, "azfunction": false, "reports": false, "shipping": false, "fedex": false, "ups": false, "taxmng": false, "avatax": false}'
+        type: string
+
+
+jobs:
+  # Parse the JSON input and create an environment variable listing all services that need deployment
+  parse_services:
+    runs-on: ubuntu-latest
+    outputs:
+      services_list: ${{ steps.set_services.outputs.services_list }}
+    steps:
+      - name: Parse services JSON
+        id: set_services
+        run: |
+          SERVICES=$(echo '${{ github.event.inputs.services }}' | jq -r 'to_entries[] | select(.value == true) | .key' | paste -sd "," -)
+          echo "::set-output name=services_list::${SERVICES}"
+
+      - name: Debug services list
+        run: |
+          echo "Services list: ${{ steps.set_services.outputs.services_list }}"
+
+
+  trigger_db_deploy:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.trigger_db_deploy == 'true'
+    steps:
+      - name: DB Trigger 
+        run: |
+          curl -X POST \
+          -H "Authorization: token ${{ secrets.ACCESS_REPO }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+           https://api.github.com/repos/MRRSoft/znode10-devops/actions/workflows/db_deploy_sandbox.yml/dispatches \
+          -d '{
+           "ref": "master",
+            "inputs": {
+            "branch": "${{ inputs.branch }}",
+            "environment": "${{ inputs.environment }}",
+            "multifront_db": "true",
+            "hangfire_db": "true",
+            "recommendation_db": "true",
+            "payment_manager_db": "true",
+            "sandbox_run_number": "'${{ github.run_number }}'"
+                  }
+            }'
+
+  webstore_deployment:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'wbst') || github.event.inputs.all == 'true'
+
+    steps:
+      - name: Checkout Webstore Repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode-webstore10x-page-builder
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+    
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode-webstore10x-page-builder/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build and Push
+        working-directory: ./
+        run: |
+          echo "Creating .env file dynamically during runtime..."
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          echo "AppName=webstore" >> .env
+          echo "FilePath=./apps/webstore/Dockerfile" >> .env
+          echo "ImageName=znode10xwebstoreimage" >> .env
+          echo "Generated .env file contents:"
+          cat .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+      # docker compose --env-file .env.webstore build --build-arg EnvFile=.env.webstore --no-cache
+      # docker compose --env-file .env.webstore push --ignore-push-failures
+
+      - name: Kubernetes Setup
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Apply Webstore ConfigMap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap/
+        run: kubectl apply -f kube-webstore-config.yml -n znode
+
+      - name: Apply and Restart Webstore
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-webstore.yml --record -n znode
+          kubectl set image deployment/znode10xwebstore znode10xwebstore=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xwebstoreimage:${{ env.IMAGE_TAG }} -n znode
+        #kubectl rollout restart deployment znode10xwebstore -n znode
+
+
+  pagebuilder_deployment:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'pgbld') || github.event.inputs.all == 'true'
+
+    steps:
+      - name: Checkout Webstore Repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode-webstore10x-page-builder
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+    
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode-webstore10x-page-builder/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build and Push
+        working-directory: ./
+        run: |
+          echo "Creating .env file dynamically during runtime..."
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          echo "AppName=page-builder" >> .env
+          echo "FilePath=./apps/page-builder/Dockerfile" >> .env
+          echo "ImageName=znode10xpagebuilder" >> .env
+          echo "Generated .env file contents:"
+          cat .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+      # docker compose --env-file .env.page.builder build --build-arg EnvFile=.env.page.builder --no-cache
+      # docker compose --env-file .env.page.builder push --ignore-push-failures
+
+      - name: Kubernetes Setup
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Apply pagebuilder ConfigMap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap/
+        run: kubectl apply -f kube-pagebuilder-config.yml -n znode
+
+      - name: Apply and Restart pagebuilder
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-page-builder.yml --record -n znode
+          kubectl set image deployment/znode10xpagebuilder znode10xpagebuilder=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xpagebuilder:${{ env.IMAGE_TAG }} -n znode
+        #kubectl rollout restart deployment znode10xpagebuilder -n znode
+
+
+  admin_deployment:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'admin') || github.event.inputs.all == 'true'
+
+    steps:
+      - name: Checkout Admin Repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-admin-migration
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-admin-migration/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build and Push
+        working-directory: ./Znode.Admin
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+
+      - name: Kubernetes Setup
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Apply Admin ConfigMap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap/
+        run: kubectl apply -f kube-admin-config.yml -n znode
+
+      - name: Apply and Restart Admin Service
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-admin.yml --record -n znode
+          kubectl set image deployment/znode10xadmin znode10xadmin=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xadminimage:${{ env.IMAGE_TAG }} -n znode --record
+      #kubectl rollout restart deployment znode10xadmin -n znode
+
+
+  api_deployment:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'api') || github.event.inputs.all == 'true'
+
+    steps:
+      - name: Checkout API Repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-api-migration
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-api-migration/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build and Push
+        working-directory: ./Znode.Multifront
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+
+            
+      - name: Kubernetes Setup
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master          
+
+      - name: Apply API ConfigMap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap/
+        run: kubectl apply -f kube-api-config.yml -n znode  
+
+      - name: Apply and Restart API Service
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+           kubectl apply -f kube-deploy-api.yml --record -n znode
+           kubectl set image deployment/znode10xapi znode10xapicontainer=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xapiimage:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xapi -n znode
+
+
+
+  gateway_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'gateway') || github.event.inputs.all == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-api-gateways
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-api-gateways/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build and Push
+        working-directory: ./Znode.APIGateways
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+
+      - name: Docker Logout
+        run: docker logout ${{ secrets.ACR_SERVER }}.azurecr.io
+        continue-on-error: true
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap/
+        run: kubectl apply -f kube-apigateways-config.yml -n znode
+
+      - name: Apply and Restart Apigateways Application
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-apigateways.yml --record -n znode
+          kubectl set image deployment/znode10xapigateways znode10xapigateways=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xapigateways:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xapigateways -n znode
+
+
+  customtable_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'customtable') || github.event.inputs.all == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-api-migration
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-api-migration/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build and Push
+        working-directory: ./Znode.Multifront
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose-customtable.yml build --no-cache
+          docker compose -f docker-compose-customtable.yml push --ignore-push-failures
+
+
+      - name: Docker Logout
+        run: docker logout ${{ secrets.ACR_SERVER }}.azurecr.io
+        continue-on-error: true
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap/
+        run: kubectl apply -f kube-customtable-config.yml -n znode
+
+      - name: Apply and Restart Customtable Application
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-customtable.yml --record -n znode
+          kubectl set image deployment/znode10xcustomtable znode10xcustomtable=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xcustomtableimage:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xcustomtable -n znode
+
+  # Example for another service: api-v2_build
+  api-v2_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'v2') || github.event.inputs.all == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-api-migration
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-api-migration/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build and Push
+        working-directory: ./Znode.Multifront
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose-v2-api.yml build --no-cache
+          docker compose -f docker-compose-v2-api.yml push --ignore-push-failures
+
+      - name: Docker Logout
+        run: docker logout ${{ secrets.ACR_SERVER }}.azurecr.io
+        continue-on-error: true
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap/
+        run: kubectl apply -f kube-api-v2-config.yml -n znode
+
+      - name: Apply and Restart API-V2 Application
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-api-v2.yml --record -n znode
+          kubectl set image deployment/znode10xapiv2 znode10xapiv2=${{ secrets.ACR_SERVER }}.azurecr.io/znode10apiv2:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xcustomer -n znode
+
+          
+############        
+#    CP    #
+############
+
+  apicp_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'a-commerce') || github.event.inputs.all == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-commerceportal-api
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{inputs.branch}}
+
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-commerceportal-api/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: Znode_CommercePortal/
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap/
+        run: kubectl apply -f kube-api-cp-config.yml -n znode       
+
+      - name: Apply and Restart Api-cp Application 
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-api-cp.yml --record -n znode
+          kubectl set image deployment/znode10apicp znode10apicpcontainer=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xcommerceportalapiimage:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10apicp -n znode
+
+
+  cp_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'portal') || github.event.inputs.all == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-commerceportal
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{inputs.branch}}
+
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-commerceportal/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+            username: ${{ secrets.ACRUN }}
+            password: ${{ secrets.ACRPW}}
+            registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: .
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+    
+    
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap/
+        run: kubectl apply -f kube-cp-config.yml -n znode
+  
+      - name: Apply and Restart CP Application 
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-cp.yml --record -n znode
+          kubectl set image deployment/znode10xcp znode10xcpcontainer=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xcpportalimage:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xcp -n znode
+
+  customapi_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'cstm') || github.event.inputs.all == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-customapi-sdk
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{inputs.branch}}
+
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-customapi-sdk/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+            username: ${{ secrets.ACRUN }}
+            password: ${{ secrets.ACRPW}}
+            registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: .
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+    
+    
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap/
+        run: kubectl apply -f kube-customapi-config.yml -n znode
+  
+      - name: Apply and Restart Customapi Application 
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-custom-api.yml --record -n znode
+          kubectl set image deployment/znode10customapi znode10customapicontainer=${{ secrets.ACR_SERVER }}.azurecr.io/znode10customapi:${{ env.IMAGE_TAG }} -n znode  
+        #kubectl rollout restart deployment znode10customapi -n znode
+
+        
+######################
+#   Payment Manager  #
+######################
+
+  payment_manager_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'paymngr') || github.event.inputs.all == 'true'
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2  
+        with:
+          repository: MRRSoft/znode10-payment-manager
+          token: ${{ secrets.ACCESS_REPO }} 
+          ref: ${{inputs.branch}}
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-payment-manager/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+          
+          
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: ./API/Znode.Payment.Manager/ 
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+        
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap
+        run: kubectl apply -f kube-payment-manager-config.yml -n znode
+            
+      - name: Apply and Restart payment-manager Application
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-payment-manager.yml -n znode
+          kubectl set image deployment/znode10xpaymentmanager znode10xpaymentmanager=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xpaymentmanager:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xpaymentmanager -n znode
+
+  plugin_spreedly_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'spreedly') || github.event.inputs.all == 'true'
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-plugin-payment-spreedly
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{inputs.branch}}
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-plugin-payment-spreedly/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: ./API
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+        
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap
+        run: kubectl apply -f kube-plugin-spreedly-config.yml -n znode
+           
+      - name: Apply and Restart Plugin-spreedly Application  
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-plugin-spreedly.yml -n znode
+          kubectl set image deployment/znode10xpluginspreedly znode10xpluginspreedly=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xpluginpaymentspreedly:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xpluginspreedly -n znode
+
+  plugin_braintree_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'braintree') || github.event.inputs.all == 'true'
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-plugin-payment-braintree
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{inputs.branch}}
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-plugin-payment-braintree/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+          
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: ./API
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+        
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap
+        run: kubectl apply -f kube-plugin-braintree-config.yml -n znode
+           
+      - name: Apply and Restart Plugin-braintree Application 
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-plugin-braintree.yml -n znode
+          kubectl set image deployment/znode10xpluginbraintree znode10xpluginbraintree=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xpluginpaymentbraintree:${{ env.IMAGE_TAG }} -n znode --record
+
+
+######################
+#   shipping Manager  #
+######################
+  shipping_manager_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'shipping') || github.event.inputs.all == 'true'
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2  
+        with:
+          repository: MRRSoft/znode10-shipping-manager
+          token: ${{ secrets.ACCESS_REPO }} 
+          ref: ${{inputs.branch}}
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-shipping-manager/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: ./API/Znode.Shipping.Manager/ 
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+        
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap
+        run: kubectl apply -f kube-shipping-manager-config.yml -n znode
+            
+      - name: Apply and Restart payment-manager Application
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-shipping-manager.yml -n znode
+          kubectl set image deployment/znode10xshippingmanager znode10xshippingmanager=${{ secrets.ACR_SERVER }}.azurecr.io/znodeshippingmanagerapi:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xpaymentmanager -n znode
+
+  plugin_fedex_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'fedex') || github.event.inputs.all == 'true'
+        
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-plugin-shipping-fedex
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{inputs.branch}}
+
+          
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-plugin-shipping-fedex/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: ./API/Znode.Plugin.Shipping.Fedex/
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+        
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap
+        run: kubectl apply -f kube-plugin-fedex-config.yml -n znode
+            
+      - name: Apply and Restart Plugin-spreedly Application  
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-plugin-fedex.yml -n znode
+          kubectl set image deployment/znode10xpluginfedex znode10xpluginfedex=${{ secrets.ACR_SERVER }}.azurecr.io/znodepluginshippingfedexapi:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xpluginspreedly -n znode
+
+  plugin_ups_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'ups') || github.event.inputs.all == 'true'
+        
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-plugin-shipping-ups
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{inputs.branch}}
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-plugin-shipping-ups/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: ./API/Znode.Plugin.Shipping.UPS/
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+        
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap
+        run: kubectl apply -f kube-plugin-ups-config.yml -n znode
+            
+      - name: Apply and Restart Plugin-braintree Application 
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-plugin-ups.yml -n znode
+          kubectl set image deployment/znode10xpluginups znode10xpluginups=${{ secrets.ACR_SERVER }}.azurecr.io/znodepluginshippingupsapi:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xpluginbraintree -n znode
+
+######## AzureFunction
+  azfunction_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'azfunction') || github.event.inputs.all == 'true'      
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-api-migration
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-api-migration/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: ./Znode.AzureFunction
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose-azfunctions.yml build --no-cache
+          docker compose -f docker-compose-azfunctions.yml push --ignore-push-failures
+
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+          
+      - name: Set up Kubeconfig
+        run: |
+            mkdir -p ~/.kube
+            echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+
+      - name: Apply and Restart Azfunction
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |           
+          kubectl apply -f kube-deploy-azfunctions.yml -n znode          
+          kubectl set image deployment/znode10xazfunctions znode10xazfunctions=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xazurefunctionimage:${{ env.IMAGE_TAG }} -n znode --record
+
+        
+######## Reports
+
+  reports_api_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'reports') || github.event.inputs.all == 'true'
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-reports-api
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{inputs.branch}}
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-reports-api/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+      
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: ./Znode.Reports
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+
+      
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+        
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap
+        run: kubectl apply -f kube-reports-config.yml -n znode
+          
+      - name: Apply and Restart Plugin-braintree Application 
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-reports.yml -n znode
+          kubectl set image deployment/znode10xreports znode10xreportapi=${{ secrets.ACR_SERVER }}.azurecr.io/znode10xreportapi:${{ env.IMAGE_TAG }} -n znode --record
+         #kubectl rollout restart deployment znode10xreports -n znode
+
+  taxmanager_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'taxmng') || github.event.inputs.all == 'true'
+            
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-tax-manager
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{inputs.branch}}
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-tax-manager/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+          
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: ./API/Znode.Tax.Manager/
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+        
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap
+        run: kubectl apply -f kube-tax-manager-config.yml -n znode
+            
+      - name: Apply and Restart taxmanager Application 
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-tax-manager.yml -n znode
+          kubectl set image deployment/znode10xtaxmanager znode10xtaxmanager=${{ secrets.ACR_SERVER }}.azurecr.io/znodetaxmanagerapi:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xpluginbraintree -n znode
+
+
+  avatax_build:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: parse_services
+    if: contains(needs.parse_services.outputs.services_list, 'avatax') || github.event.inputs.all == 'true'
+                    
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-plugin-tax-avatax
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{inputs.branch}}
+
+      - name: Get and Compute New Release Tag
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/MRRSoft/znode10-plugin-tax-avatax/tags")
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+          fi
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          else
+            build=$((build + 1))
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          echo "IMAGE_TAG=$new_tag" >> $GITHUB_ENV
+          echo "release_name=Znode10-${new_tag}-Release" >> $GITHUB_ENV
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.ACRUN }}
+          password: ${{ secrets.ACRPW}}
+          registry: ${{ secrets.ACR_SERVER }}.azurecr.io
+
+      - name: Docker Compose Build 
+        working-directory: ./API/Znode.Plugin.Tax.Avatax/
+        run: |
+          echo "Tag=${{ env.IMAGE_TAG }}" > .env
+          echo "AmlaRegistry=${{ secrets.ACR_SERVER }}.azurecr.io" >> .env
+          docker compose -f docker-compose.yml build --no-cache
+          docker compose -f docker-compose.yml push --ignore-push-failures
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+        
+      - name: Apply Configmap
+        working-directory: tenants/${{ github.event.inputs.environment }}/configmap
+        run: kubectl apply -f kube-avatax-config.yml -n znode
+            
+      - name: Apply and Restart avatax Application 
+        working-directory: tenants/${{ github.event.inputs.environment }}/deploy/app/pods
+        run: |
+          kubectl apply -f kube-deploy-tax-avatax.yml -n znode
+          kubectl set image deployment/znode10xavatax znode10xavatax=${{ secrets.ACR_SERVER }}.azurecr.io/znodeplugintaxavataxapi:${{ env.IMAGE_TAG }} -n znode --record
+        #kubectl rollout restart deployment znode10xpluginbraintree -n znode
+
+##########################################################################################################################################################################################################################################
+                                                                                                 # RELEASE TAG #
+##########################################################################################################################################################################################################################################
+  update_webpage_tag:
+    runs-on: ubuntu-latest
+    needs: [webstore_deployment, pagebuilder_deployment]
+    if: always() && ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}  # Ensures the job runs even if some deploy jobs fail
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode-webstore10x-page-builder/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode-webstore10x-page-builder"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+
+  admin_tag:
+    runs-on: ubuntu-latest
+    needs: admin_deployment
+    if: ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}
+
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-admin-migration/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-admin-migration"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+
+  gateways_tag:
+    runs-on: ubuntu-latest
+    needs: gateway_build
+    if: ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}
+
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-api-gateways/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-api-gateways"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+          
+  update_tag:
+    runs-on: ubuntu-latest
+    needs: [api_deployment, customtable_build, api-v2_build, azfunction_build]
+    if: always() && ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}  # Ensures the job runs even if some deploy jobs fail
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-api-migration/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-api-migration"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+          
+          
+        
+  api_cp_tag:
+    runs-on: ubuntu-latest
+    needs: apicp_build
+    if: ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}
+
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-commerceportal-api/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-commerceportal-api"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+
+  cp_tag:
+    runs-on: ubuntu-latest
+    needs: cp_build
+    if: ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}
+
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-commerceportal/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-commerceportal"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+
+
+  custom_api_tag:
+    runs-on: ubuntu-latest
+    needs: customapi_build
+    if: ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}
+
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-customapi-sdk/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-customapi-sdk"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+  
+  Payment_Mngr_tag:
+    runs-on: ubuntu-latest
+    needs: payment_manager_build
+    if: ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}
+  
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-payment-manager/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-payment-manager"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+
+  
+  Spreedly_tag:
+    runs-on: ubuntu-latest
+    needs: plugin_spreedly_build
+    if: ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}
+  
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-plugin-payment-spreedly/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-plugin-payment-spreedly"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+
+  
+  Plugin_Braintree_tag:
+    runs-on: ubuntu-latest
+    needs: plugin_braintree_build
+    if: ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}
+  
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-plugin-payment-braintree/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-plugin-payment-braintree"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+
+  report_api_tag:
+    runs-on: ubuntu-latest
+    needs: reports_api_build
+    if: ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}
+  
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-reports-api/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-reports-api"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+
+  taxmanager_tag:
+    runs-on: ubuntu-latest
+    needs: taxmanager_build
+    if: ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}
+          
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-tax-manager/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-tax-manager"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+
+  avatax_tag:
+    runs-on: ubuntu-latest
+    needs: avatax_build
+    if: ${{ inputs.branch == 'master' && inputs.environment == 'sandbox' }}
+                  
+    steps:
+      - name: Get the latest tag and create new one
+        id: versioning
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          RELEASE_TYPE="${{ inputs.release_type }}"
+          # Get latest tag from GitHub API
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            https://api.github.com/repos/MRRSoft/znode10-plugin-tax-avatax/tags)
+          latest_tag=$(echo "$response" | jq -r '.[].name' | grep -E '^v10\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ -z "$latest_tag" ]; then
+            latest_tag="v10.0.0.0"
+            echo "No valid tags found, starting from $latest_tag"
+          fi
+          echo "Latest tag found: $latest_tag"
+          # Remove 'v' and split version
+          version=$(echo "$latest_tag" | sed 's/^v//')
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+          build=$(echo "$version" | cut -d. -f4)
+          if [ "$RELEASE_TYPE" == "major" ]; then
+            minor=$((minor + 1))
+            patch=0
+            build=0
+          elif [ "$RELEASE_TYPE" == "minor" ]; then
+            patch=$((patch + 1))
+            build=0
+          elif [ "$RELEASE_TYPE" == "patch" ]; then
+            build=$((build + 1))
+          else
+            echo "Invalid release type: $RELEASE_TYPE"
+            exit 1
+          fi
+          new_tag="v${major}.${minor}.${patch}.${build}"
+          new_release_name="Znode10-${new_tag}-Release"
+          echo "New tag: $new_tag"
+          echo "New release name: $new_release_name"
+          echo "tag_name=$new_tag" >> $GITHUB_ENV
+          echo "release_name=$new_release_name" >> $GITHUB_ENV
+      - name: Create GitHub Release
+        run: |
+          GITHUB_TOKEN=${{ secrets.PAT }}
+          repo="MRRSoft/znode10-plugin-tax-avatax"
+          tag="${{ env.tag_name }}"
+          release_name="${{ env.release_name }}"
+          response=$(curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/$repo/releases \
+            -d "{
+              \"tag_name\": \"$tag\",
+              \"name\": \"$release_name\",
+              \"body\": \"Release $release_name created with tag $tag.\",
+              \"draft\": false,
+              \"prerelease\": true
+            }")
+          echo "Release created: $response"
+          
+  gateway_restart:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: [admin_deployment, api_deployment, customtable_build, api-v2_build, apicp_build, customapi_build, payment_manager_build]
+    if: >-
+      always() &&
+      (
+        needs.admin_deployment.result == 'success' ||
+        needs.api_deployment.result == 'success' ||
+        needs.customtable_build.result == 'success' ||
+        needs.api-v2_build.result == 'success' ||
+        needs.apicp_build.result == 'success' ||
+        needs.customapi_build.result == 'success' ||
+        needs.payment_manager_build.result == 'success'
+      )
+    steps:
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+          
+      - name: Set up Kubeconfig
+        run: |
+            mkdir -p ~/.kube
+            echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          
+      - name: Apply and Restart Gateways  
+        run: |           
+          sleep 90
+          kubectl rollout restart deployment znode10xapigateways -n znode

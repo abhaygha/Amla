@@ -1,0 +1,40 @@
+{{- $es := .Values.resources.znode10xelasticsearch }}
+{{- if and $es.enableService $es.volume }}
+# PV for Azure File
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: znode10xelasticsearch-pv
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: {{ include "znode10-helm-db.name" $ }}
+spec:
+  capacity:
+    storage: {{ $es.volume.size }}
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""  # Must be blank when using manual binding
+  azureFile:
+    secretName: {{ $es.volume.azureFile.secretName }}
+    shareName: {{ $es.volume.azureFile.shareName }}
+    readOnly: false
+---
+# PVC bound to PV
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: znode10xelasticsearch-pvc
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: {{ include "znode10-helm-db.name" $ }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ $es.volume.size }}
+  storageClassName: ""  # Must match PV storageClassName (blank)
+{{- end }}

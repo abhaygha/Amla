@@ -1,0 +1,71 @@
+name: Znode10 AKS Onboarding Using Helm Chart
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: 'Client/Tenant Name'
+        required: true
+      environment:
+        description: 'Environment Type'
+        required: true
+        default: 'np'
+      namespace:
+        description: 'Namespace'
+        required: true
+        default: 'znode'
+      ingressip:
+        description: 'Static Ingress IP'
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy Znode10x Helm Chart
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.tenant }}${{ github.event.inputs.environment }}
+
+    steps:
+
+      - name: Add Bitnami Helm Repository for Redis
+        working-directory: ./helm-aks/znode10-helm/redis
+        run: helm repo add bitnami https://charts.bitnami.com/bitnami
+      
+      - name: Install or Upgrade Redis webstore using Helm
+        working-directory: ./helm-aks/znode10-helm/redis
+        run: |
+          helm repo update
+  
+          set_affinity=""
+          if [ "${{ vars.CLUSTER_TYPE }}" = "aks" ]; then
+            set_affinity="--set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key=agentpool \
+              --set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator=In \
+              --set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].values[0]=znode10apl"
+          fi
+          helm upgrade --install rediswebstore bitnami/redis \
+            -f redis-helm-webstore.yml -n ${{ github.event.inputs.namespace}}
+      
+          - name: Install or Upgrade Redis api using Helm
+            working-directory: ./helm-aks/znode10-helm/redis
+            run: |
+              helm repo update
+      
+              set_affinity=""
+              if [ "${{ vars.CLUSTER_TYPE }}" = "aks" ]; then
+                set_affinity="--set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key=agentpool \
+                  --set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator=In \
+                  --set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].values[0]=znode10apl"
+              fi
+              helm upgrade --install redisapi bitnami/redis \
+                -f redis-helm-api.yml -n ${{ github.event.inputs.namespace}}
+      
+          - name: Run Redis Client Pod for Rediswebstore in Background
+            working-directory: ./helm-aks/znode10-helm
+            run: |
+              kubectl run --namespace ${{ github.event.inputs.namespace }} rediswebstore-client --restart='Never' \
+                --image docker.io/bitnami/redis:7.4.0-debian-12-r2 --command -- sleep infinity
+      
+          - name: Run Redis Client Pod for Redisapi in Background
+            working-directory: ./helm-aks/znode10-helm
+            run: |
+              kubectl run --namespace ${{ github.event.inputs.namespace }} redisapi-client --restart='Never' \
+                --image docker.io/bitnami/redis:7.4.0-debian-12-r2 --command -- sleep infinity

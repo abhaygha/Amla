@@ -1,0 +1,292 @@
+global:
+  enableResources: true
+  enableHPA: true # ← enable HPA globally
+  hpa:
+    minReplicas: 1 # ← global default min
+    maxReplicas: 1 # ← global default max
+
+resources:
+  znode10xapi:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "1600Mi"
+        cpu: "250m"
+      limits:
+        memory: "1800Mi"
+        cpu: "350m"
+
+  znode10xapiv2:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "1600Mi"
+        cpu: "250m"
+      limits:
+        memory: "1800Mi"
+        cpu: "350m"
+
+  znode10xapigateways:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "1200Mi"
+        cpu: "250m"
+      limits:
+        memory: "1400Mi"
+        cpu: "350m"
+
+  znode10customapi:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "500Mi"
+        cpu: "250m"
+      limits:
+        memory: "700Mi"
+        cpu: "350m"
+
+  znode10xapicp:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "1600Mi"
+        cpu: "250m"
+      limits:
+        memory: "1800Mi"
+        cpu: "300m"
+
+  znode10xcp:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "2280Mi"
+        cpu: "700m"
+      limits:
+        memory: "2556Mi"
+        cpu: "800m"
+
+  znode10xadmin:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "1800Mi"
+        cpu: "200m"
+      limits:
+        memory: "2000Mi"
+        cpu: "300m"
+
+  znode10xazfunctions:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  znode10xpaymentmanager:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  znode10xreports:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  znode10xshippingmanager:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "150m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+
+  znode10xpluginbraintree:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  znode10xpluginfedex:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  znode10xpluginspreedly:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  znode10xpluginups:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  znode10xtaxmanager:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  znode10xavatax:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  znode10xgraphqlapi:
+    enableService: true
+    serviceType: "ClusterIP"
+    port: "80"
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  znode10xcustomtable:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "150m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+
+  znode10xwebstore:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "1700Mi"
+        cpu: "350m"
+      limits:
+        memory: "1800Mi"
+        cpu: "400m"
+
+  znode10xpagebuilder:
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "500Mi"
+        cpu: "200m"
+      limits:
+        memory: "700Mi"
+        cpu: "300m"
+
+  znode10xcommerceconnectoradmin:
+    enableService: true
+    serviceType: "ClusterIP"
+    port: "80"
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+
+  znode10xcommerceconnectorapi:
+    enableService: true
+    serviceType: "ClusterIP"
+    port: "80"
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"

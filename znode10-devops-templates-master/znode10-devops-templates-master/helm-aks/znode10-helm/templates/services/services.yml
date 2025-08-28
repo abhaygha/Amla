@@ -1,0 +1,21 @@
+# templates/service.yaml
+{{- range $name, $svc := .Values.resources }}
+{{- if and ($svc.enableService | default false) (or (hasKey $svc.image "tag") (hasKey $.Values.global "imageTag")) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app: {{ $name }}
+    service: {{ $name }}
+spec:
+  type: {{ $svc.serviceType | default "ClusterIP" }}
+  ports:
+    - port: {{ $svc.port | default 80 }}
+      targetPort: {{ $svc.port | default 80 }}
+  selector:
+    service: {{ $name }}
+---
+{{- end }}
+{{- end }}

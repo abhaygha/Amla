@@ -1,0 +1,120 @@
+architecture: "replication"
+auth:
+  enabled: false
+
+# Redis Master Configuration
+master:
+  disableCommands: [] # Override the disableCommands setting to enable FLUSHALL and FLUSHDB
+  persistence:
+    enabled: true
+    existingClaim: redis-pvc
+  service:
+    type: ClusterIP
+    nameOverride: redisapi-master
+  podAntiAffinityPreset: "soft"
+  resources:
+    requests:
+      memory: "1200Mi"
+      cpu: "200m"
+    limits:
+      memory: "1400Mi"
+      cpu: "250m"
+      
+  config: |
+    dir /data
+    appendonly yes
+    save ""
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit slave 512mb 128mb 60
+    client-output-buffer-limit pubsub 64mb 16mb 60
+    tcp-keepalive 180
+    timeout 180
+    maxclients 30000
+    lua-time-limit 1000
+    repl-timeout 10000
+    maxmemory 2gb
+    maxmemory-policy allkeys-lru
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+      
+  # affinity:
+  #   nodeAffinity:
+  #     requiredDuringSchedulingIgnoredDuringExecution:
+  #       nodeSelectorTerms:
+  #       - matchExpressions:
+  #         - key: agentpool
+  #           operator: In
+  #           values:
+  #           - znode10apl # Node affinity for master
+replica:
+  disableCommands: []
+  replicaCount: 2
+  persistence:
+    enabled: false
+  #    existingClaim: znode10-redis-pvc
+  service:
+    type: ClusterIP
+    nameOverride: redisapi-replica
+  podAntiAffinityPreset: "soft"
+  resources:
+    requests:
+      memory: "1200Mi"
+      cpu: "200m"
+    limits:
+      memory: "1400Mi"
+      cpu: "250m"
+  config: |
+    dir /data
+    appendonly yes
+    save ""
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit slave 512mb 128mb 60
+    client-output-buffer-limit pubsub 64mb 16mb 60
+    tcp-keepalive 180
+    timeout 180
+    maxclients 20000
+    lua-time-limit 1000
+    repl-timeout 10000
+    maxmemory 2gb
+    maxmemory-policy allkeys-lru
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+      
+  # affinity:
+  #   nodeAffinity:
+  #     requiredDuringSchedulingIgnoredDuringExecution:
+  #       nodeSelectorTerms:
+  #       - matchExpressions:
+  #         - key: agentpool
+  #           operator: In
+  #           values:
+  #           - znode10apl # Node affinity for replicas
+sentinel:
+  enabled: true
+  replicas: 1
+  service:
+    type: ClusterIP
+    nameOverride: znode10redis-sentinel
+  podAntiAffinityPreset: "soft"
+  configmap: |
+    sentinel monitor mymaster rediswebstore-master.znode.svc.cluster.local 6379 2
+    sentinel down-after-milliseconds mymaster 5000
+    sentinel failover-timeout mymaster 10000
+  resources:
+    requests:
+      memory: "1200Mi"
+      cpu: "120m"
+    limits:
+      memory: "1400Mi"
+      cpu: "150m"
+
+# helm repo add bitnami https://charts.bitnami.com/bitnami
+# install or upgrade using below commands
+# helm install rediswebstore bitnami/redis -f webstore-redis.yml -n znode
+# helm upgrade rediswebstore bitnami/redis -f webstore-redis.yml -n znode
+# kubectl run --namespace znode redis-client --restart='Never'  --image docker.io/bitnami/redis:7.4.0-debian-12-r2 --command -- sleep infinity
+# kubectl exec --tty -i redis-client    --namespace znode -- bash

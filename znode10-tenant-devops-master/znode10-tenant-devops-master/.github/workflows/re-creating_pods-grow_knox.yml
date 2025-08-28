@@ -1,0 +1,138 @@
+name: Re-creating Pods of Grow And Knox
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select the environment'
+        required: true
+        type: choice
+        options:
+          - knoxdev
+          - growdev
+      choice:
+        description: 'Send email notification?'
+        type: choice
+        options:
+          - 'Yes'
+          - 'No'
+
+jobs:
+  deploy_build_on_aks:
+    name: Re-creating Pods
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+        with: 
+            ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+            
+      - name: Delete znode pods
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "knoxdev" ]; then
+            kubectl delete -f tenants/knox/dev/deploy/app/pods -n znode
+          elif [ "${{ github.event.inputs.environment }}" == "growdev" ]; then
+            kubectl delete -f tenants/grow/dev/deploy/app/pods -n znode
+          fi
+
+  setup_terraform:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    needs: deploy_build_on_aks
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up Kubeconfig
+        run: |
+            mkdir -p ~/.kube
+            echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+        shell: bash
+
+      - name: Delete existing ConfigMaps
+        run: |
+          kubectl delete configmap znode10apicp  -n znode
+          kubectl delete configmap znode10customapi -n znode
+          kubectl delete configmap znode10xadmin  -n znode
+          kubectl delete configmap znode10xapi  -n znode
+          kubectl delete configmap znode10xapigateway-cp  -n znode
+          kubectl delete configmap znode10xapigateways  -n znode
+          kubectl delete configmap znode10xcp  -n znode
+          kubectl delete configmap znode10xapiv2 -n znode
+          kubectl delete configmap znode10xcustomtable   -n znode
+          kubectl delete configmap znode10xpayment  -n znode
+          kubectl delete configmap znode10xwebstore  -n znode
+
+      - name: Terraform Init and Apply
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "knoxdev" ]; then
+            terraform -chdir=tenants/knox/dev/terraform init
+            terraform -chdir=tenants/knox/dev/terraform apply -auto-approve
+          elif [ "${{ github.event.inputs.environment }}" == "growdev" ]; then
+            terraform -chdir=tenants/grow/dev/terraform init
+            terraform -chdir=tenants/grow/dev/terraform apply -auto-approve
+          fi
+            
+      - name: Create znode pods
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "knoxdev" ]; then
+            kubectl create -f tenants/knox/dev/deploy/app/pods -n znode
+          elif [ "${{ github.event.inputs.environment }}" == "growdev" ]; then
+            kubectl create -f tenants/grow/dev/deploy/app/pods -n znode
+          fi
+
+  email_alerts:
+    name: Send Email Notification
+    runs-on: ubuntu-latest
+    needs: setup_terraform
+    if: ${{ github.event.inputs.choice == 'Yes' }}
+    steps:
+      - name: Set Email Subject and Body
+        id: set_email_content
+        run: |
+          STATUS=${{ job.status }}
+          DEPLOYMENT_TIME=$(TZ='Asia/Kolkata' date +"%Y-%m-%d %H:%M:%S")
+          if [ "${STATUS}" == "success" ]; then
+            SUBJECT="Znode10 ${{ github.event.inputs.environment }} Build - *Success*"
+            BODY="Hi Team,<br><font color='green'>The deployment status of Znode10 ${{ github.event.inputs.environment }} is done successfully.</font><br><br><b>Deployment Time:</b> ${DEPLOYMENT_TIME}"
+          else
+            SUBJECT="Znode10 ${{ github.event.inputs.environment }} Build - *Failed*"
+            BODY="Hi Team,<br><font color='red'>The deployment status of Znode10 ${{ github.event.inputs.environment }} has failed.</font><br><br><b>Deployment Time:</b> ${DEPLOYMENT_TIME}"
+          fi
+          echo "subject=${SUBJECT}" >> $GITHUB_ENV
+          echo "body=${BODY}" >> $GITHUB_ENV
+
+      - name: Send Email
+        env:
+          EMAIL_TO: "znode-mission@mrrsoft.com"
+          EMAIL_FROM: "tfsalert@amla.io"
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          TRIGGERED_BY: ${{ github.actor }}
+          SUBJECT: ${{ env.subject }}
+          BODY: ${{ env.body }}
+        run: |
+          IFS=',' read -r -a EMAIL_ARRAY <<< "${EMAIL_TO}"
+          BODY="${BODY} <br>This build was triggered by: ${TRIGGERED_BY}."
+          for EMAIL in "${EMAIL_ARRAY[@]}"; do
+            echo "Sending email to ${EMAIL}"  # Debug statement
+            echo -e "Subject:${SUBJECT}\nContent-Type: text/html\n\n${BODY}" | \
+            curl --url 'smtps://smtp.gmail.com:465' --ssl-reqd \
+              --mail-from "${EMAIL_FROM}" --mail-rcpt "${EMAIL}" \
+              --user "${EMAIL_FROM}:${EMAIL_PASSWORD}" \
+              --upload-file -
+          done

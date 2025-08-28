@@ -1,0 +1,49 @@
+global:
+
+multiwebIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret
+    services:
+    - webstore-automation
+  rules:
+  - name: webstore-automation
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+resources:
+  znode10xcp:
+    enableService: true
+    serviceType: ClusterIP
+    port: 443
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10cpportalimage
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "2280Mi"
+        cpu: "500m"
+      limits:
+        memory: "2556Mi"
+        cpu: "700m"
+    configmap:
+      TZ: "America/New_York"
+      PORT: "443"
+      HTTPS: "true"
+      REACT_APP_Znode_Admin_Website: "https://admin{{ $.Values.global.domain }}"
+      REACT_APP_API_URL: "https://apigateways{{ $.Values.global.domain }}"
+      REACT_APP_BASE_URL: "https://commerceportal{{ $.Values.global.domain }}"
+      REACT_APP_THUMBNAIL_IMAGE_PATH: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      REACT_APP_CP_URL_PATH: "http://znode10xapicp.{{ .Release.Namespace }}.svc.cluster.local"
+      REACT_APP_CP_Client_Name: "api{{ $.Values.global.domain }}"
+      REACT_APP_CP_Client_Key: "{{ .Values.global.key.domainkey }}"
+
+  znode10xapi:
+    configmap:
+      appsettings__IsShippingHandlingCharge: "true"

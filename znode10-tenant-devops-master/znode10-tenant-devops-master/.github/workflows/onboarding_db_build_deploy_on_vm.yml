@@ -1,0 +1,313 @@
+name: Onboarding - Build and Deploy DB on Azure VM
+  
+on:
+  workflow_dispatch:
+    inputs:
+      tenant:
+        type: string
+        description: Tenant Name
+        required: true
+          
+      environment:
+        type: string
+        description: Environment
+        required: true
+          
+      branch:
+        description: "The branch to deploy from"
+        required: true
+        type: string
+        default: master
+        
+      DB_SERVER:
+        type: string
+        description: Target DB Server
+        required: true
+        
+      AZURE_VM_DB_USERNAME:
+        type: string
+        description: DB Username
+        required: true
+              
+      AZURE_VM_DB_PASSWORD:
+        type: string
+        description: DB Password
+        required: true
+              
+      multifront_db:
+        description: "Build Multifront DB"
+        required: true
+        default: false
+        type: boolean
+
+      hangfire_db:
+        description: "Build Hangfire DB"
+        required: true
+        default: false
+        type: boolean
+
+      recommendation_db:
+        description: "Build Recommendation DB"
+        required: true
+        default: false
+        type: boolean
+
+      payment_manager_db:
+        description: "Build Pymt Mngr DB"
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  build_multifront_db:
+    runs-on: windows-2022
+    if: ${{ github.event.inputs.multifront_db == 'true' }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          repository: MRRSoft/znode10-multifront-db
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+          path: znode10-multifront-db
+
+      - name: Build DACPAC
+        run: |
+          cd znode10-multifront-db
+          & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\msbuild.exe' `
+            Znode_Multifront/Znode_Multifront_Database.sln `
+            /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0 /t:Clean,Build
+      - name: Copy output to flat structure
+        run: |
+          mkdir dacpac-out
+          copy "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\140\SqlSchemas\master.dacpac" dacpac-out\
+          copy znode10-multifront-db\Znode_Multifront\Znode_Multifront_Database\bin\Debug\Znode_Multifront_Database.dacpac dacpac-out\
+          
+      - name: Upload DACPAC Artifacts (flat)
+        uses: actions/upload-artifact@v4
+        with:
+          name: multifront-dacpac
+          path: dacpac-out
+
+  deploy_multifront_db:
+    runs-on: [self-hosted, 172.19.203.4]
+    needs: build_multifront_db
+    if: ${{ github.event.inputs.multifront_db == 'true' }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Download Multifront DACPAC Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: multifront-dacpac
+          path: ./dacpac
+
+      - name: Deploy Multifront DB
+        env:
+          DACPAC_FILE: "${{ github.workspace }}/dacpac/Znode_Multifront_Database.dacpac"
+          MASTER_DACPAC: "${{ github.workspace }}/dacpac/master.dacpac"
+          DB_NAME: "wbst_${{ github.event.inputs.tenant }}_${{ github.event.inputs.environment }}"
+          DB_SERVER: ${{ inputs.DB_SERVER }}
+          DB_USER: ${{ inputs.AZURE_VM_DB_USERNAME }}
+          DB_PASS: ${{ inputs.AZURE_VM_DB_PASSWORD }}
+        run: |
+          echo "Deploying $DACPAC_FILE to $DB_NAME"
+          /opt/sqlpackage/sqlpackage /Action:Publish \
+            /SourceFile:"$DACPAC_FILE" \
+            /TargetConnectionString:"Server=$DB_SERVER;Database=$DB_NAME;User Id=$DB_USER;Password=$DB_PASS;Encrypt=False;TrustServerCertificate=True;" \
+            /p:BlockOnPossibleDataLoss=false \
+            /p:AdditionalDeploymentContributorArguments="/p:ReferencePath=$(dirname $MASTER_DACPAC)"
+              
+  build_hangfire_db:
+    runs-on: windows-2022
+    if: ${{ github.event.inputs.hangfire_db == 'true' }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          repository: MRRSoft/znode10-hangfire-db
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+          path: znode10-hangfire-db
+
+      - name: Build DACPAC
+        run: |
+          cd znode10-hangfire-db
+          & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\msbuild.exe' `
+            Znode_Multifront_Hangfire/Znode_Multifront_Hangfire_Database.sln `
+            /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0 /t:Clean,Build
+      - name: Copy output to flat structure
+        run: |
+          mkdir dacpac-out
+          copy "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\140\SqlSchemas\master.dacpac" dacpac-out\
+          copy znode10-hangfire-db\Znode_Multifront_Hangfire\Znode_Multifront_Hangfire_Database\bin\Debug\Znode_Multifront_Hangfire_Database.dacpac dacpac-out\
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hangfire-dacpac
+          path: dacpac-out
+
+  deploy_hangfire_db:
+    runs-on: [self-hosted, 172.19.203.4]
+    needs: build_hangfire_db
+    if: ${{ github.event.inputs.hangfire_db == 'true' }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Download DACPAC
+        uses: actions/download-artifact@v4
+        with:
+          name: hangfire-dacpac
+          path: ./dacpac
+
+      - name: Deploy Hangfire DB
+        env:
+          DACPAC_FILE: "${{ github.workspace }}/dacpac/Znode_Multifront_Hangfire_Database.dacpac"
+          MASTER_DACPAC: "${{ github.workspace }}/dacpac/master.dacpac"
+          DB_NAME: "hgfr_${{ github.event.inputs.tenant }}_${{ github.event.inputs.environment }}"
+          DB_SERVER: ${{ inputs.DB_SERVER }}
+          DB_USER: ${{ inputs.AZURE_VM_DB_USERNAME }}
+          DB_PASS: ${{ inputs.AZURE_VM_DB_PASSWORD }}
+        run: |
+          echo "Deploying $DACPAC_FILE to $DB_NAME"
+          /opt/sqlpackage/sqlpackage /Action:Publish \
+            /SourceFile:"$DACPAC_FILE" \
+            /TargetConnectionString:"Server=$DB_SERVER;Database=$DB_NAME;User Id=$DB_USER;Password=$DB_PASS;Encrypt=False;TrustServerCertificate=True;" \
+            /p:BlockOnPossibleDataLoss=false \
+            /p:AdditionalDeploymentContributorArguments="/p:ReferencePath=$(dirname $MASTER_DACPAC)"
+              
+  build_recommendation_db:
+    runs-on: windows-2022
+    if: ${{ github.event.inputs.recommendation_db == 'true' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          repository: MRRSoft/znode10-recommendation-engine-db
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+          path: znode10-recommendation-engine-db
+
+      - name: Build DACPAC
+        run: |
+          cd znode10-recommendation-engine-db
+          & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\msbuild.exe' `
+            Znode_Multifront_RecommendationEngine/Znode_Multifront_RecommendationEngine_Database.sln `
+            /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0 /t:Clean,Build
+      - name: Copy output to flat structure
+        run: |
+          mkdir dacpac-out
+          copy "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\140\SqlSchemas\master.dacpac" dacpac-out\
+          copy znode10-recommendation-engine-db\Znode_Multifront_RecommendationEngine\Znode_Multifront_RecommendationEngine_Database\bin\Debug\Znode_Multifront_RecommendationEngine_Database.dacpac dacpac-out\
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-dacpac
+          path: dacpac-out
+
+  deploy_recommendation_db:
+    runs-on: [self-hosted, 172.19.203.4]
+    needs: build_recommendation_db
+    if: ${{ github.event.inputs.recommendation_db == 'true' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Download DACPAC
+        uses: actions/download-artifact@v4
+        with:
+          name: recommendation-dacpac
+          path: ./dacpac
+
+      - name: Deploy Recommendation DB
+        env:
+          DACPAC_FILE: "${{ github.workspace }}/dacpac/Znode_Multifront_RecommendationEngine_Database.dacpac"
+          MASTER_DACPAC: "${{ github.workspace }}/dacpac/master.dacpac"
+          DB_NAME: "rceg_${{ github.event.inputs.tenant }}_${{ github.event.inputs.environment }}"
+          DB_SERVER: ${{ inputs.DB_SERVER }}
+          DB_USER: ${{ inputs.AZURE_VM_DB_USERNAME }}
+          DB_PASS: ${{ inputs.AZURE_VM_DB_PASSWORD }}
+        run: |
+          echo "Deploying $DACPAC_FILE to $DB_NAME"
+          /opt/sqlpackage/sqlpackage /Action:Publish \
+            /SourceFile:"$DACPAC_FILE" \
+            /TargetConnectionString:"Server=$DB_SERVER;Database=$DB_NAME;User Id=$DB_USER;Password=$DB_PASS;Encrypt=False;TrustServerCertificate=True;" \
+            /p:BlockOnPossibleDataLoss=false \
+            /p:AdditionalDeploymentContributorArguments="/p:ReferencePath=$(dirname $MASTER_DACPAC)"
+              
+  build_payment_manager_db:
+    runs-on: windows-2022
+    if: ${{ github.event.inputs.payment_manager_db == 'true' }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          repository: MRRSoft/znode10-plugin-payment-db
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+          path: znode10-plugin-payment-db
+
+      - name: Build DACPAC
+        run: |
+          cd znode10-plugin-payment-db
+          & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\msbuild.exe' `
+            Znode_Multifront_Plugin_Payment/Znode_Multifront_Plugin_Payment_Database.sln `
+            /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0 /t:Clean,Build
+      - name: Copy output to flat structure
+        run: |
+          mkdir dacpac-out
+          copy "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\Microsoft\SQLDB\Extensions\SqlServer\140\SqlSchemas\master.dacpac" dacpac-out\
+          copy znode10-plugin-payment-db\Znode_Multifront_Plugin_Payment\Znode_Multifront_Plugin_Payment\bin\Debug\Znode_Multifront_Plugin_Payment.dacpac dacpac-out\
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: payment-dacpac
+          path: dacpac-out
+
+  deploy_payment_manager_db:
+    runs-on: [self-hosted, 172.19.203.4]
+    needs: build_payment_manager_db
+    if: ${{ github.event.inputs.payment_manager_db == 'true' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Download DACPAC
+        uses: actions/download-artifact@v4
+        with:
+          name: payment-dacpac
+          path: ./dacpac
+
+      - name: Deploy Payment Manager DB
+        env:
+          DACPAC_FILE: "${{ github.workspace }}/dacpac/Znode_Multifront_Plugin_Payment.dacpac"
+          MASTER_DACPAC: "${{ github.workspace }}/dacpac/master.dacpac"
+          DB_NAME: "pymt_mngr_${{ github.event.inputs.tenant }}_${{ github.event.inputs.environment }}"
+          DB_SERVER: ${{ inputs.DB_SERVER }}
+          DB_USER: ${{ inputs.AZURE_VM_DB_USERNAME }}
+          DB_PASS: ${{ inputs.AZURE_VM_DB_PASSWORD }}
+        run: |
+          echo "Deploying $DACPAC_FILE to $DB_NAME"
+          /opt/sqlpackage/sqlpackage /Action:Publish \
+            /SourceFile:"$DACPAC_FILE" \
+            /TargetConnectionString:"Server=$DB_SERVER;Database=$DB_NAME;User Id=$DB_USER;Password=$DB_PASS;Encrypt=False;TrustServerCertificate=True;" \
+            /p:BlockOnPossibleDataLoss=false \
+            /p:AdditionalDeploymentContributorArguments="/p:ReferencePath=$(dirname $MASTER_DACPAC)"

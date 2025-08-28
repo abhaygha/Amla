@@ -1,0 +1,53 @@
+name: Sync ACR Images with Specific Tag
+
+on:
+  workflow_run:
+    workflows: ["Build and Deploy INT QA STAGE SANDBOX Using Helm Chart on AKS"]
+    types:
+      - completed
+
+jobs:
+  sync-acr-images:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'qat' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login (required for az acr commands)
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_NEW }}
+
+      - name: Docker Login to Source ACR
+        run: |
+          echo "${{ secrets.SOURCE_ACR_PASSWORD }}" | docker login "${{ secrets.SOURCE_ACR }}" \
+            -u "${{ secrets.SOURCE_ACR_USERNAME }}" --password-stdin
+
+      - name: Docker Login to Destination ACR
+        run: |
+          echo "${{ secrets.DEST_ACR_PASSWORD }}" | docker login "${{ secrets.DEST_ACR }}" \
+            -u "${{ secrets.DEST_ACR_USERNAME }}" --password-stdin
+
+      - name: Sync ACR Images with Tag z10-qa
+        run: |
+          SOURCE_ACR="${{ secrets.SOURCE_ACR }}"
+          DEST_ACR="${{ secrets.DEST_ACR }}"
+          TAG="z10-qa"
+          SOURCE_NAME="${SOURCE_ACR%%.*}"
+
+          echo "Fetching repositories from $SOURCE_NAME..."
+          REPOS=$(az acr repository list --name "$SOURCE_NAME" --output tsv)
+
+          for repo in $REPOS; do
+              TAGS=$(az acr repository show-tags --name "$SOURCE_NAME" --repository "$repo" --output tsv || true)
+              if echo "$TAGS" | grep -qx "$TAG"; then
+                  echo "Syncing image: $repo:$TAG"
+                  docker pull "$SOURCE_ACR/$repo:$TAG"
+                  docker tag "$SOURCE_ACR/$repo:$TAG" "$DEST_ACR/$repo:$TAG"
+                  docker push "$DEST_ACR/$repo:$TAG"
+              else
+                  echo "Tag $TAG not found in $repo, skipping."
+              fi
+          done

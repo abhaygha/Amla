@@ -1,0 +1,72 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    znodekube.version: "10.0"
+  creationTimestamp: null
+  labels:
+    service: znode10xpayment
+  name: znode10xpayment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: znode10xpayment
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+        znodekube.version: "10.0"
+      creationTimestamp: null
+      labels:
+        io.znodekube.network/znode10xapinetworkexternal: "true"
+        io.znodekube.network/znode10xmongonetwork: "true"
+        service: znode10xpayment
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: agentpool
+                operator: In
+                values:
+                - znode10upl
+
+      imagePullSecrets:
+      - name: znodenonprodacrsecret
+      volumes:
+      - name: pfx-certs
+        secret:
+          secretName: amla-pfx-secret
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: znode10xpayment
+
+        image: az204containerregistery.azurecr.io/znode10xpaymentimage:z10-stage
+        resources:
+          requests:
+            memory: 400Mi
+            cpu: 200m
+          limits:
+            memory: 600Mi
+            cpu: 250m
+        imagePullPolicy: Always
+        name: znode10xpayment
+        ports:
+        - containerPort: 443
+        volumeMounts:
+        - name: pfx-certs
+          mountPath: /app/pfx
+          readOnly: true
+      # restartPolicy: Always
+status: {}
+
+
+---

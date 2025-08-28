@@ -1,0 +1,15 @@
+global:
+
+  # multiwebIngress:
+  #   enabled: true
+  #   tls:
+  #     secretName: api-tls-secret
+  #     services:
+  #     - "*"
+  #   rules:
+  #   - name: "*"
+  #     serviceName: znode10xwebstore
+  #     servicePort: 443
+  #     paths:
+  #     - path: /
+  #       pathType: Prefix

@@ -1,0 +1,954 @@
+global:
+  enableResources: true
+  enableHPA: true # ← enable HPA globally
+  hpa:
+    minReplicas: 1 # ← global default min
+    maxReplicas: 1 # ← global default max
+  newrelic:
+    enabled: false
+
+resources:
+  znode10xapi:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 2
+    image:
+      name: znode10api
+      pullPolicy: Always
+    storage:
+    - name: persistkeys
+      enabled: true
+      containerName: z10-data
+      accountName: "" # override via env-values if needed
+      secretName: znode10storage
+      mountPath: /app/Data/persistkeys/znodecrkey
+      readOnly: false
+      size: 1Gi
+      accessModes:
+      - ReadWriteMany
+    resources:
+      requests:
+        memory: "2000Mi"
+        cpu: "400m"
+      limits:
+        memory: "2100Mi"
+        cpu: "500m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_URLS: "http://+:80"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      Caching__Type: "ZnodeRedisCache"
+      Caching__InMemoryCacheKeys: "DomainConfig,SiteConfig,AliasedSiteConfig,ProductPromotionCache,AllPromotionCache,CartPromotionCache,PricePromotionCache,Promotion,DefaultPublishState,DefaultGlobalSettingCache,GlobalSettingAttributeHelperCacheKey,EnvironmentConfig,MessageConfig,DefaultGlobalTimeZoneCache,DefaultDisplayTimeZone,DefaultSavedTimeZone,DefaultLoggingConfigCache,DefaultMediaConfigurationCache,ActiveLocaleList,DefaultGlobalConfigCache"
+      Caching__RedisCacheConnectionString: "redisapi-headless.{{ .Release.Namespace }}:26379,serviceName=mymaster,allowAdmin=True"
+      EventBus__RabbitMQManagementUrl: "http://znode10xrabbitmq.{{ .Release.Namespace }}:15672"
+      EventBus__RabbitMQConnectionString: "amqp://guest:guest@znode10xrabbitmq.{{ .Release.Namespace }}:5672"
+      appsettings__ElasticSearchRootUri: "http://znode10xelasticsearch.{{ .Release.Namespace }}.svc.cluster.local:9200"
+      appsettings__PluginApiRootUri: "https://pluginserver.znode.com"
+      appsettings__EnableTokenBasedAuthorization: "false"
+      appsettings__ValidateAuthHeader: "false"
+      appsettings__CacheTimeout: "20"
+      appsettings__ZnodeApiRootUri: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__PublishProductFetchChunkSize: "7000"
+      appsettings__AzureBlobURL: "{{ .Values.storage.url }}"
+      appsettings__ERPConnectorFolder: "themeeditor/CustomAPICore"
+      appsettings__CustomAPIRootUri: "http://znode10customapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeApiDomainName: "knoxapi{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiDomainKey: "{{ .Values.global.key.domainkey }}"
+      appsettings__ZnodeApiGateway: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__AzureBlobConnectionString: "{{ .Values.storage.connection_string }}"
+      appsettings__AzureBlobContainerName: "z10-resources"
+      appsettings__AdminWebsiteUrl: "https://admin{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiV2RootUri: "http://znode10xapiv2.{{ .Release.Namespace }}.svc.cluster.local"
+      ConnectionStrings__ZnodeECommerceDB: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__Znode_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodePublish_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeKlaviyo_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeFramework_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__HangfireConnection: "{{ .Values.global.db.hgfr_db }}"
+      ConnectionStrings__ZnodeRecommendationDB: "{{ .Values.global.db.rceg_db }}"
+      ConnectionStrings__ZnodeRecommendation_Entities: "{{ .Values.global.db.rceg_db }}"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.{{ .Release.Namespace }}:27017/Znode_10xFeature_Docker_LogMessage"
+      appsettings__IsShippingHandlingCharge: "false"
+
+  znode10xapiv2:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 2
+    image:
+      name: znode10apiv2
+      pullPolicy: Always
+    storage:
+    - name: persistkeys
+      enabled: true
+      containerName: z10-data
+      accountName: "" # override via env-values if needed
+      secretName: znode10storage
+      mountPath: /app/Data/persistkeys/znodecrkey
+      readOnly: false
+      size: 1Gi
+      accessModes:
+      - ReadWriteMany
+    resources:
+      requests:
+        memory: "1500Mi"
+        cpu: "200m"
+      limits:
+        memory: "1800Mi"
+        cpu: "300m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_URLS: "http://+:80"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      Caching__Type: "ZnodeRedisCache"
+      Caching__RedisCacheConnectionString: "redisapi-headless.{{ .Release.Namespace }}:26379,serviceName=mymaster,allowAdmin=True"
+      Caching__InMemoryCacheKeys: "DomainConfig,SiteConfig,AliasedSiteConfig,EnvironmentConfig,MessageConfig,DefaultGlobalTimeZoneCache,DefaultDisplayTimeZone,DefaultSavedTimeZone,DefaultLoggingConfigCache,DefaultMediaConfigurationCache,ActiveLocaleList,DefaultGlobalConfigCache"
+      ConnectionStrings__ZnodeECommerceDB: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__Znode_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodePublish_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeKlaviyo_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeFramework_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__HangfireConnection: "{{ .Values.global.db.hgfr_db }}"
+      ConnectionStrings__ZnodeRecommendationDB: "{{ .Values.global.db.rceg_db }}"
+      ConnectionStrings__ZnodeRecommendation_Entities: "{{ .Values.global.db.rceg_db }}"
+      appsettings__ElasticSearchRootUri: "http://znode10xelasticsearch.{{ .Release.Namespace }}.svc.cluster.local:9200"
+      appsettings__ProductPublishChunkSize: "200"
+      appsettings__IndexChunkSizeOnCategoryPublish: "200"
+      appsettings__PublishProductFetchChunkSize: "10000"
+      appsettings__SearchIndexChunkSize: "500"
+      appsettings__PublishCatalogConnectionTime: "60"
+      # appsettings__GeminiAPIEndPoint: "https://generativelanguage.googleapis.com/v1beta/models/"
+      # appsettings__GeminiAPIKey: "AIzaSyByJRQjdoTEUEmFFH3W9ytmJGqSGgq5o4o"
+      # appsettings__GeminiModel: "gemini-1.5-flash"
+      appsettings__ValidateAuthHeader: "false"
+      appsettings__ZnodeApiDomainKey: "{{ .Values.global.key.domainkey }}"
+      appsettings__ZnodeApiDomainName: "knoxapi{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiGateway: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeApiRootUri: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeApiV2RootUri: "http://znode10xapiv2.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__CustomAPIRootUri: "http://znode10customapi.{{ .Release.Namespace }}.svc.cluster.local"
+      EventBus__RabbitMQConnectionString: "amqp://guest:guest@znode10xrabbitmq.{{ .Release.Namespace }}:5672"
+      EventBus__RabbitMQManagementUrl: http://znode10xrabbitmq.{{ .Release.Namespace }}:15672
+
+  znode10xapigateways:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 2
+    image:
+      name: znode10apigateways
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "1200Mi"
+        cpu: "200m"
+      limits:
+        memory: "1400Mi"
+        cpu: "300m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_URLS: "http://+:80"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      AuthKeys__JWTEncryptionKey: "qwertyqwertyqwer"
+      AuthKeys__JWTSigningKey: "ynsblmdqvrtfeqdhdajiiulzqrhmoamyxfydfphhmwzfcrtzowvhmtzfszitqjmdxjzldvsrbvlnfhrgnsnoxqhoalnlfjbygcan"
+      AuthKeys__JWTExpirySpan: "30"
+      AuthKeys__Issuer: "knoxapigateway{{ $.Values.global.domain }}"
+      AuthKeys__Audience: "{{ $.Values.global.webstoreURL}}"
+      AuthKeys__AuthRootUri: "knoxapi{{ $.Values.global.domain }}"
+      AuthKeys__AuthRootKey: "{{ .Values.global.key.domainkey }}"
+      MicroServices__customapi: "http://znode10customapi.{{ .Release.Namespace }}.svc.cluster.local"
+      MicroServices__customtable: "http://znode10xcustomtable.{{ .Release.Namespace }}.svc.cluster.local"
+      MicroServices__znodeengineapiv2: "http://znode10xapiv2.{{ .Release.Namespace }}.svc.cluster.local/"
+      MicroServices__multifrontapi: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      MicroServices__cpapi: "http://znode10xapicp.{{ .Release.Namespace }}.svc.cluster.local"
+      MicroServices__ReportsApi: "http://znode10xreports.{{ .Release.Namespace }}.svc.cluster.local"
+      MicroServices__paymentmanager: "http://znode10xpaymentmanager.{{ .Release.Namespace }}.svc.cluster.local"
+      MicroServices__shippingmanager: "http://znode10xshippingmanager.{{ .Release.Namespace }}.svc.cluster.local"
+      MicroServices__graphqlapi: "http://znode10xgraphqlapi.{{ .Release.Namespace }}.svc.cluster.local"
+      MicroServices__taxmanager: "http://znode10xtaxmanager.{{ .Release.Namespace }}.svc.cluster.local"
+      SwaggerEndPoints__0__Key: "customtable"
+      SwaggerEndPoints__0__Config__0__Name: "Znode Custom Table API"
+      SwaggerEndPoints__0__Config__0__Version: "v1"
+      SwaggerEndPoints__0__Config__0__Url: "https://knoxapigateway{{ $.Values.global.domain }}/Swagger/customtable/swagger.json"
+      SwaggerEndPoints__0__Config__0__BaseUrl: "http://znode10xcustomtable.{{ .Release.Namespace }}.svc.cluster.local/swagger/v1/swagger.json"
+      SwaggerEndPoints__1__Key: "customapi"
+      SwaggerEndPoints__1__Config__0__Name: "Znode Custom API"
+      SwaggerEndPoints__1__Config__0__Version: "v1"
+      SwaggerEndPoints__1__Config__0__Url: "https://knoxapigateway{{ $.Values.global.domain }}/Swagger/customapi/swagger.json"
+      SwaggerEndPoints__1__Config__0__BaseUrl: "http://znode10customapi.{{ .Release.Namespace }}.svc.cluster.local/swagger/v1/swagger.json"
+      SwaggerEndPoints__2__Key: "znodeengineapiv2"
+      SwaggerEndPoints__2__Config__0__Name: "Znode Engine API V2"
+      SwaggerEndPoints__2__Config__0__Version: "v2"
+      SwaggerEndPoints__2__Config__0__Url: "https://knoxapigateway{{ $.Values.global.domain }}/Swagger/znodeengineapiv2/swagger.json"
+      SwaggerEndPoints__2__Config__0__BaseUrl: "http://znode10xapiv2.{{ .Release.Namespace }}.svc.cluster.local/swagger/v2/swagger.json"
+      SwaggerEndPoints__3__Key: "multifrontapi"
+      SwaggerEndPoints__3__Config__0__Name: "Znode Web API"
+      SwaggerEndPoints__3__Config__0__Version: "v1"
+      SwaggerEndPoints__3__Config__0__Url: "https://knoxapigateway{{ $.Values.global.domain }}/Swagger/multifrontapi/swagger.json"
+      SwaggerEndPoints__3__Config__0__BaseUrl: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local/swagger/v1/swagger.json"
+      SwaggerEndPoints__4__Key: "cpapi"
+      SwaggerEndPoints__4__Config__0__Name: "Znode CP API"
+      SwaggerEndPoints__4__Config__0__Version: "v2"
+      SwaggerEndPoints__4__Config__0__Url: "https://knoxapigateway{{ $.Values.global.domain }}/Swagger/cpapi/swagger.json"
+      SwaggerEndPoints__4__Config__0__BaseUrl: "http://znode10xapicp.{{ .Release.Namespace }}.svc.cluster.local/swagger/v2/swagger.json"
+      SwaggerEndPoints__5__Key: "ReportsApi"
+      SwaggerEndPoints__5__Config__0__Name: "Znode Reports API"
+      SwaggerEndPoints__5__Config__0__Version: "v1"
+      SwaggerEndPoints__5__Config__0__Url: "https://knoxapigateway{{ $.Values.global.domain }}/Swagger/ReportsApi/swagger.json"
+      SwaggerEndPoints__5__Config__0__BaseUrl: "http://znode10xreports.{{ .Release.Namespace }}.svc.cluster.local/swagger/v1/swagger.json"
+      SwaggerEndPoints__6__Key: "paymentmanager"
+      SwaggerEndPoints__6__Config__0__Name: "Znode Payment Manager"
+      SwaggerEndPoints__6__Config__0__Version: "v1"
+      SwaggerEndPoints__6__Config__0__Url: "https://knoxapigateway{{ $.Values.global.domain }}/Swagger/paymentmanager/swagger.json"
+      SwaggerEndPoints__6__Config__0__BaseUrl: "http://znode10xpaymentmanager.{{ .Release.Namespace }}.svc.cluster.local/swagger/v1/swagger.json"
+      SwaggerEndPoints__7__Key: "shippingmanager"
+      SwaggerEndPoints__7__Config__0__Name: "Znode Shipping Manager"
+      SwaggerEndPoints__7__Config__0__Version: "v1"
+      SwaggerEndPoints__7__Config__0__Url: "https://knoxapigateway{{ $.Values.global.domain }}/Swagger/shippingmanager/swagger.json"
+      SwaggerEndPoints__7__Config__0__BaseUrl: "http://znode10xshippingmanager.{{ .Release.Namespace }}.svc.cluster.local/swagger/v1/swagger.json"
+      SwaggerEndPoints__8__Config__0__BaseUrl: "http://znode10xtaxmanager.{{ .Release.Namespace }}.svc.cluster.local/swagger/v1/swagger.json"
+      SwaggerEndPoints__8__Config__0__Name: "Znode Taxmanager API"
+      SwaggerEndPoints__8__Config__0__Url: "https://knoxapigateway{{ $.Values.global.domain }}/Swagger/taxmanager/swagger.json"
+      SwaggerEndPoints__8__Config__0__Version: "v1"
+      SwaggerEndPoints__8__Key: "taxmanager"
+      SwaggerEndPoints__9__Config__0__BaseUrl: "http://znode10xgraphqlapi.{{ .Release.Namespace }}.svc.cluster.local/swagger/v1/swagger.json"
+      SwaggerEndPoints__9__Config__0__Name: "Znode Graphql API"
+      SwaggerEndPoints__9__Config__0__Url: "https://knoxapigateway{{ $.Values.global.domain }}/Swagger/graphqlapi/swagger.json"
+      SwaggerEndPoints__9__Config__0__Version: "v1"
+      SwaggerEndPoints__9__Key: "graphqlapi"
+
+      appsettings__PrivateTokenAuthorization: "true"
+      appsettings__EnableJWTAuthorization: "true"
+      appsettings__EnableBlobConfiguration: "true"
+      appsettings__containerKey: "{{ .Values.storage.name }}"
+      appsettings__connectionString: "{{ .Values.storage.connection_string }}"
+      appsettings__directoryKey: "CustomAPISDK/"
+
+  znode10customapi:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 2
+    image:
+      name: znode10customapi
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "500Mi"
+        cpu: "200m"
+      limits:
+        memory: "700Mi"
+        cpu: "300m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_URLS: "http://+:80"
+      appsettings__IsGlobalAPIAuthorization: "true"
+      appsettings__PluginApiRootUri: "https://pluginserver.com"
+      appsettings__ZnodeApiRootUri: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeApiGateway: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeCorsAllowedURLS: "https://{{ $.Values.global.webstoreURL}},https://znode10xapicp.{{ .Release.Namespace }}.svc.cluster.local,https://admin{{ $.Values.global.domain }}"
+      appsetting__ZnodeAdminURLCorsPolicy: "https://admin{{ $.Values.global.domain }},https://localhost:44392"
+      appsettings__ZnodeApiDomainName: "knoxapi{{ $.Values.global.domain }}"
+      Caching__Type: "Redis"
+      Caching__RedisCacheConnectionString: "redisapi-headless.{{ .Release.Namespace }}:26379,serviceName=mymaster,allowAdmin=True"
+      appsettings__ZnodeApiDomainKey: "{{ .Values.global.key.domainkey }}"
+      EventBus__RabbitMQConnectionString: "amqp://guest:guest@znode10xrabbitmq.{{ .Release.Namespace }}:5672"
+      EventBus__RabbitMQManagementUrl: "http://znode10xrabbitmq.{{ .Release.Namespace }}:15672"
+      DatabaseSettings__Znode_Entities: "{{ .Values.global.db.wbst_db }}"
+      appsettings__EnableTokenBasedAuthorization: "false"
+      # appsettings__ZnodeTenantManagerUri: "https://znodecli-docker-dev.amla.io"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.{{ .Release.Namespace }}:27017/Znode_10xFeature_Docker_LogMessage"
+      ConnectionStrings__ZnodeECommerceDB: "{{ .Values.global.db.wbst_db }}"
+
+  znode10xapicp:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 2
+    image:
+      name: znode10commerceportalapiimage
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "1500Mi"
+        cpu: "200m"
+      limits:
+        memory: "1800Mi"
+        cpu: "300m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_URLS: "http://+:80"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      appsettings__ZnodeApiGateway: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ElasticSearchRootUri: "http://znode10xelasticsearch.{{ .Release.Namespace }}.svc.cluster.local:9200"
+      appsettings__EnableTokenBasedAuthorization: "false"
+      appsettings__EnableBasicAuthorization: "true"
+      appsettings__ValidateAuthHeader: "false"
+      appsettings__ZnodeApiDomainName: "knoxapi{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiDomainKey: "{{ .Values.global.key.domainkey }}"
+      Caching__Type: "ZnodeRedisCache"
+      Caching__RedisCacheConnectionString: "redisapi-headless.{{ .Release.Namespace }}:26379,serviceName=mymaster,allowAdmin=True"
+      Caching__InMemoryCacheKeys: "DomainConfig,SiteConfig,AliasedSiteConfig,EnvironmentConfig,MessageConfig,DefaultGlobalTimeZoneCache,DefaultDisplayTimeZone,DefaultSavedTimeZone,DefaultLoggingConfigCache,DefaultMediaConfigurationCache,ActiveLocaleList,DefaultGlobalConfigCache"
+      appsettings__ZnodeApiRootUri: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeApiV2RootUri: "http://znode10xapiv2.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__CustomAPIRootUri: "http://znode10customapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__PublishProductFetchChunkSize: "7000"
+      appsettings__ZnodeCommercePortalRootUri: "http://znode10xapicp.{{ .Release.Namespace }}.svc.cluster.local"
+      ConnectionStrings__ZnodeECommerceDB: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__Znode_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodePublish_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeKlaviyo_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeFramework_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__Znode_CommercePortalDBEntities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.{{ .Release.Namespace }}:27017/Znode_10xFeature_Docker_LogMessage"
+      appsettings__ZnodeCpApiDomainName: "api-cp{{ $.Values.global.domain }}"
+
+  znode10xcp:
+    enableService: true
+    serviceType: ClusterIP
+    port: 443
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10cpportalimage
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "2280Mi"
+        cpu: "400m"
+      limits:
+        memory: "2556Mi"
+        cpu: "700m"
+    configmap:
+      TZ: "America/New_York"
+      PORT: "443"
+      HTTPS: "true"
+      REACT_APP_Znode_Admin_Website: "https://admin{{ $.Values.global.domain }}"
+      REACT_APP_API_URL: "https://knoxapigateway{{ $.Values.global.domain }}"
+      REACT_APP_BASE_URL: "https://spp{{ $.Values.global.domain }}"
+      REACT_APP_THUMBNAIL_IMAGE_PATH: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      REACT_APP_CP_URL_PATH: "http://znode10xapicp.{{ .Release.Namespace }}.svc.cluster.local"
+      REACT_APP_CP_Client_Name: "knoxapi{{ $.Values.global.domain }}"
+      REACT_APP_CP_Client_Key: "{{ .Values.global.key.domainkey }}"
+
+  znode10xadmin:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10admin
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "1800Mi"
+        cpu: "200m"
+      limits:
+        memory: "2000Mi"
+        cpu: "300m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_URLS: "http://+:80"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      Caching__InMemoryCacheKeys: "DomainConfig,SiteConfig,AliasedSiteConfig,EnvironmentConfig,MessageConfig,DefaultGlobalTimeZoneCache,DefaultDisplayTimeZone,DefaultSavedTimeZone,DefaultLoggingConfigCache,DefaultMediaConfigurationCache,ActiveLocaleList,DefaultGlobalConfigCache"
+      appsettings__ZnodeApiRootUri: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeApiDomainName: "knoxapi{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiDomainKey: "{{ .Values.global.key.domainkey }}"
+      appsettings__ZnodeAdminUri: "https://admin{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiGateway: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeGoogleMapKey: "AIzaSyDzQcVG1LYGzI8U7IlQwuZcl8S6eSxRLzc"
+      appsettings__AzureBlobConnectionString: "{{ .Values.storage.connection_string }}"
+      appsettings__AzureBlobContainerName: "z10-resources"
+      appSettings__HangfireConnection: "{{ .Values.global.db.hgfr_db }}"
+      appsettings__ZnodeCommercePortalRootUri: "http://znode10xapicp.{{ .Release.Namespace }}.svc.cluster.local"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.{{ .Release.Namespace }}:27017/Znode_10xFeature_Docker_LogMessage"
+      SessionState__IdleTimeout: '60'
+      appsettings__AuthenticationCookieExpireTimeSpan: '120'
+
+  znode10xazfunctions:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10azurefunctionimage
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      RabbitMqConnectionString: "amqp://guest:guest@znode10xrabbitmq.znode:5672"
+      SqlConnectionString: "{{ .Values.global.db.wbst_db }}"
+
+  znode10xpaymentmanager:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10paymentmanager
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_CULTURE: en_US.UTF-8
+      ASPNETCORE_HTTPS_PORT: http://+:80
+      ASPNETCORE_UI_CULTURE: en_US.UTF-8
+      ASPNETCORE_URLS: http://+:80
+      AllowedHosts: "*"
+      ApplicationInsights__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.znode:27017/Znode_10xFeature_Docker_LogMessage"
+      Caching__AbsoluteExpiration: "30"
+      Caching__CacheSchemaName: "dbo"
+      Caching__CacheTableName: "SQLCache"
+      Caching__DeletionInterval: "30"
+      Caching__InMemoryCacheKeys: "SiteConfig"
+      Caching__RedisCacheConnectionString: "redisapi-headless.{{ .Release.Namespace }}:26379,serviceName=mymaster,allowAdmin=True"
+      Caching__RedisCacheInstanceName: "Dev"
+      Caching__SlidingExpiration: "20"
+      Caching__SqlCacheConnectionString: "{{ .Values.global.db.pymt_db }}"
+      Caching__Type: "InMemory"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.znode:27017/Znode_10xFeature_Docker_LogMessage"
+      ConnectionStrings__ZnodePaymentManager_Entities: "{{ .Values.global.db.pymt_db }}"
+      LogLevel__Default: Information
+      LogLevel__Microsoft_AspNetCore: Warning
+      appsetting__EnableTokenBasedAuthorization: "false"
+      appsetting__ZnodeApiRootUri: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsetting__payment-manager-api-znode10-stage.amla.io: "{{ .Values.global.key.domainkey }}"
+      appsettings__BraintreePluginApiRootUri: "http://znode10xpluginbraintree.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__CORSDomains: "*"
+      appsettings__EnableBasicAuthorization: "true"
+      appsettings__EnableDBLogging: "1"
+      appsettings__Log4netInternalDebugging: "0"
+      appsettings__MinifiedJsonResponse: "false"
+      appsettings__SpreedlyPluginApiRootUri: "http://znode10xpluginspreedly.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeApiDomainKey: "{{ .Values.global.key.domainkey }}"
+      appsettings__ZnodeApiDomainName: "knoxapi{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiGateway: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeCoreApiRootUri: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodePrivateKey: "432915F1-17ee-d018-a005-a14-61be3e94a83e"
+
+  znode10xreports:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10reportapi
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_CULTURE: en_US.UTF-8
+      ASPNETCORE_HTTP_PORT: http://+:80
+      ASPNETCORE_UI_CULTURE: en_US.UTF-8
+      ASPNETCORE_URLS: http://+:80
+      ConnectionStrings__ZnodeReportEntities: "{{ .Values.global.db.wbst_db }}"
+
+  znode10xshippingmanager:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znodeshippingmanagerapi
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_URLS: "http://+:80"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      ApplicationInsights__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.znode:27017/Znode_10xFeature_Docker_LogMessage"
+      Caching__RedisCacheConnectionString: "redisapi-headless.{{ .Release.Namespace }}:26379,serviceName=mymaster,allowAdmin=True"
+      Caching__SqlCacheConnectionString: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.znode:27017/Znode_10xFeature_Docker_LogMessage"
+      appsettings__ZnodeApiDomainKey: "{{ .Values.global.key.domainkey }}"
+      appsettings__ZnodeApiDomainName: "knoxapi{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiGateway: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeCoreApiRootUri: "http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodePrivateKey: 432915F1-17ee-d018-a005-a14-61be3e94a83e
+
+  # znode10xpluginserver:
+  #   enableService: false
+  #   serviceType: ClusterIP
+  #   port: 80
+  #   minReplicas: 1
+  #   maxReplicas: 1
+  #   replicaCount: 1
+  #   image:
+  #     name: znode10xpluginserverimage
+  #     pullPolicy: Always
+  #   resources:
+  #     requests:
+  #       memory: "128Mi"
+  #       cpu: "100m"
+  #     limits:
+  #       memory: "256Mi"
+  #       cpu: "200m"
+  #   configmap:
+  #     TZ: "America/New_York"
+  #     ASPNETCORE_HTTPS_PORT: "http://+:80"
+  #     ASPNETCORE_URLS: "http://+:80"
+  #     ASPNETCORE_CULTURE: "en_US.UTF-8"
+  #     ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+  #     ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.znode:27017/Znode_10xFeature_Docker_LogMessage"
+  #     ConnectionStrings__ZnodeFramework_Entities: "Server=tcp:db-znode10x-ep.database.windows.net,1433;Initial Catalog=wbst_z10x_qa;Persist Security Info=False;User ID=admin-db-znode10x-ep;Password=elPL_WJ@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  #     ConnectionStrings__Znode_Plugin_Entities: "Server=tcp:db-znode10x-ep.database.windows.net,1433;Initial Catalog=plugin_z10x_qa;Persist Security Info=False;User ID=admin-db-znode10x-ep;Password=elPL_WJ@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+
+  # znode10xclitokenqa:
+  #   enableService: false
+  #   serviceType: ClusterIP
+  #   port: 80
+  #   minReplicas: 1
+  #   maxReplicas: 1
+  #   replicaCount: 1
+  #   image:
+  #     name: znodeclitoken
+  #     pullPolicy: Always
+  #   resources:
+  #     requests:
+  #       memory: "128Mi"
+  #       cpu: "100m"
+  #     limits:
+  #       memory: "256Mi"
+  #       cpu: "200m"
+  #   configmap:
+  #     TZ: "America/New_York"
+  #     ASPNETCORE_HTTPS_PORT: "http://+:80"
+  #     ASPNETCORE_URLS: "http://+:80"
+  #     ASPNETCORE_CULTURE: "en_US.UTF-8"
+  #     ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+  #     CliContext: "Server=tcp:db-znode10x-ep.database.windows.net,1433;Initial Catalog=zcli_z10x_qa;Persist Security Info=False;User ID=admin-db-znode10x-ep;Password=elPL_WJ@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  #     ZnodeToken_Entities: "Server=tcp:db-znode10x-ep.database.windows.net,1433;Initial Catalog=zcli_z10x_qa;Persist Security Info=False;User ID=admin-db-znode10x-ep;Password=elPL_WJ@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+
+
+  znode10xpluginbraintree:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10pluginpaymentbraintree
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_URLS: "http://+:80"
+      ApplicationInsights__Enabled: "false"
+      ApplicationInsights__RoleName: "10x-paymentmanager"
+      ApplicationInsights__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.{{ .Release.Namespace }}:27017/Znode_10xFeature_Docker_LogMessage"
+      LogLevel__Default: "Information"
+      LogLevel__Microsoft_AspNetCore: "Warning"
+      AllowedHosts: "*"
+      appsettings__ZnodePaymentManagerApiRootUri: "http://znode10xpaymentmanager.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeApiGateway: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__EnableBasicAuthorization: "true"
+      # appsettings__IsGlobalAPIAuthorization: "true"
+      appsettings__ZnodeApiDomainName: "knoxapi{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiDomainKey: "{{ .Values.global.key.domainkey }}"
+      appsettings__ZnodePrivateKey: "432915F1-17ee-d018-a005-a14-61be3e94a83"
+
+  znode10xpluginfedex:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znodepluginshippingfedexapi
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_HTTP_PORT: "http://+:80"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_URLS: "http://+:80"
+      Caching__RedisCacheConnectionString: "redisapi-headless.{{ .Release.Namespace }}:26379,serviceName=mymaster,allowAdmin=True"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.{{ .Release.Namespace }}:27017/Znode_10xFeature_Docker_LogMessage"
+      Spreedly__ShippingManagerRootUri: "http://znode10xshippingmanager.{{ .Release.Namespace }}"
+      appsettings__EnableBasicAuthorization: "true"
+      appsettings__ZnodeApiDomainKey: "{{ .Values.global.key.domainkey }}"
+      appsettings__ZnodeApiDomainName: "knoxapi{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiGateway: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeShippingManagerApiRootUri: "http://znode10xshippingmanager.{{ .Release.Namespace }}"
+
+  znode10xpluginserver:
+    enableService: false
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10xpluginserverimage
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      SERVER_MODE: "standalone"
+
+  znode10xpluginspreedly:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10pluginpaymentspreedly
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_URLS: "http://+:80"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      # Appsettings Configuration
+      appsettings__CORSDomains: "*"
+      appsettings__ZnodeApiGateway: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__EnableBasicAuthorization: "true"
+      # appsettings__IsGlobalAPIAuthorization: "true"
+      appsettings__ZnodeApiDomainName: "knoxapi{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiDomainKey: "{{ .Values.global.key.domainkey }}"
+      appsettings__ZnodePrivateKey: "432915F1-17ee-d018-a005-a14-61be3e94a83"
+      appsettings__ZnodePaymentManagerApiRootUri: "http://znode10xpaymentmanager.{{ .Release.Namespace }}.svc.cluster.local"
+
+      # Spreedly Configuration
+      Spreedly__EnvironmentKey: "2BWGVRY84K8YK9QADEBETPJ37V"
+      Spreedly__SecretKey: "ITNrA5dtfxH42o6BiEMnkgvrdrDNEGbn4I8h5h44exze494vTdsu8QOI7bWNnvmo"
+      Spreedly__SigningSecret: "Wd0WynMekCM5hzyABSddtDI1vJoTCajNFvKmYXd7xfHPQXv_LElZkeeQdZIFfcOj"
+      Spreedly__RootUri: "https://core.spreedly.com"
+
+      # Plugin Field Maps
+      PluginFieldMaps__GatewayToken: "GatewayToken"
+
+      # Allowed Hosts
+      AllowedHosts: "*"
+
+  znode10xpluginups:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znodepluginshippingupsapi
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_HTTP_PORT: "http://+:80"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_URLS: "http://+:80"
+      Caching__RedisCacheConnectionString: "redisapi-headless.{{ .Release.Namespace }}:26379,serviceName=mymaster,allowAdmin=True"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.{{ .Release.Namespace }}:27017/Znode_10xFeature_Docker_LogMessage"
+      Spreedly__ShippingManagerRootUri: "http://znode10xshippingmanager.{{ .Release.Namespace }}"
+      appsettings__EnableBasicAuthorization: "true"
+      appsettings__ZnodeApiDomainKey: "{{ .Values.global.key.domainkey }}"
+      appsettings__ZnodeApiDomainName: "knoxapi{{ $.Values.global.domain }}"
+      appsettings__ZnodeApiGateway: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeShippingManagerApiRootUri: "http://znode10xshippingmanager.{{ .Release.Namespace }}"
+
+  znode10xtaxmanager:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znodetaxmanagerapi
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_CULTURE: en_US.UTF-8
+      ASPNETCORE_HTTPS_PORT: http://+:80
+      ASPNETCORE_UI_CULTURE: en_US.UTF-8
+      ASPNETCORE_URLS: http://+:80
+      appsettings__CORSDomains: '*'
+      appsettings__EnableBasicAuthorization: 'true'
+      appsettings__EnableDBLogging: '1'
+      appsettings__Log4netInternalDebugging: '0'
+      appsettings__MinimumIOCompletionThreads: '500'
+      appsettings__MinimumWorkerThreads: '10000'
+
+  znode10xavatax:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znodeplugintaxavataxapi
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_HTTP_PORT: "http://+:80"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_URLS: "http://+:80"
+
+  znode10xgraphqlapi:
+    enableService: false
+    serviceType: "ClusterIP"
+    port: "80"
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10graphqlimage
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_URLS: "http://+:80"
+      ConnectionStrings__ZnodeFramework_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.{{ .Release.Namespace }}27017/Znode_10xFeature_Docker_LogMessage"
+      ConnectionStrings__ZnodePublish_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__Znode_Entities: "{{ .Values.global.db.wbst_db }}"
+      appsettings__GraphQLUrl: "http://znode10xgraphqlapi.{{ .Release.Namespace }}.svc.cluster.local"
+      EventBus__RabbitMQConnectionString: "amqp://guest:guest@znode10xrabbitmq.{{ .Release.Namespace }}:5672"
+      EventBus__RabbitMQManagementUrl: "http://znode10xrabbitmq.{{ .Release.Namespace }}:15672"
+      ConnectionStrings__ZnodeCustomTableEntities: "{{ .Values.global.db.wbst_db }}"
+      Caching__RedisCacheConnectionString: "redisapi-headless.{{ .Release.Namespace }}:26379,serviceName=mymaster,allowAdmin=True"
+      Caching__Type: ZnodeRedisCache
+
+  znode10xcustomtable:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10customtable
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_URLS: "http://+:80"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      appsettings__AzureBlobConnectionString: "{{ .Values.storage.connection_string }}"
+      appsettings__AzureBlobContainerName: "z10-resources"
+      ConnectionStrings__ZnodeCustomTableEntities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeFramework_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__Znode_Entities: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.{{ .Release.Namespace }}:27017/Znode_10xFeature_Docker_LogMessage"
+      ConnectionStrings__Znode_Entities_CustomSP: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeCustomStoreProcedureDB: "{{ .Values.global.db.wbst_db }}"
+
+  znode10xwebstore:
+    enableService: true
+    serviceType: ClusterIP
+    port: 443
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 2
+    image:
+      name: znode10webstore
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "1700Mi"
+        cpu: "300m"
+      limits:
+        memory: "1800Mi"
+        cpu: "400m"
+    configmap:
+      TZ: "America/New_York"
+      PORT: "443"
+      NODE_ENV: "production"
+      NEXTAUTH_SECRET: "ABCDEF"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      NX_DAEMON: "false"
+      NX_DISABLE_DB: "true"
+      ENABLE_CACHE: "true"
+      REDIS_CONNECTION_STRING: "redis://rediswebstore.{{ .Release.Namespace }}:6379"
+      API_URL: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local/"
+      # API_CP_URL: "https://api-cp-qa-znode.amla.io/"
+      WEBSTORE_DOMAIN_NAME: "{{ $.Values.global.webstoreURL}}"
+      LOGGING_METHOD: "API"
+      API_DOMAIN: "knoxapi{{ $.Values.global.domain }}"
+      API_Domain_Key: "{{ .Values.global.key.domainkey }}"
+      API_V2_DOMAIN: "api-v2{{ $.Values.global.domain }}"
+      API_KEY: "{{ .Values.global.key.domainkey }}"
+      CONTENT_SECURITY_POLICY: "script-src blob: 'self' *.hsforms.net *.hsforms.com https://*.paypal.com https://*.paypal.cn https://*.paypalobjects.com https://objects.paypal.cn https://www.recaptcha.net https://www.gstatic.com https://*.synchronycredit.com https://knoxapigateway{{ $.Values.global.domain }}/ https://synchronycredit.com https://www.googleadservices.com https://static-na.payments-amazon.com https://payments-amazon.com www.googletagmanager.com https://payments-sandbox.amazon.com https://znode10x.azureedge.net/ http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local/ https://paymentknoxapi{{ $.Values.global.domain }}/ *.google-analytics.com *.osano.com *.jsdelivr.net *.authorize.net *.cybersource.com *.braintreegateway.com *.googleapis.com 'unsafe-inline' 'unsafe-eval'; connect-src 'self' *.hsforms.net *.hsforms.com https://payments.amazon.com/ https://apay-us.amazon.com/ https://payments-sandbox.amazon.com/ https://static-na.payments-amazon.com/ https://www.google-analytics.com/ https://tattle.api.osano.com/ https://consent.api.osano.com https://znode10x.azureedge.net/ http://znode10xapi.{{ .Release.Namespace }}.svc.cluster.local/ https://paymentknoxapi{{ $.Values.global.domain }}/ https://{{ $.Values.global.webstoreURL}}/ https://webstore-powertool{{ .Values.global.domain }}/ https://webstore-safetygear{{ .Values.global.domain }}/ https://webstore-prev-hardware{{ .Values.global.domain }}/ https://webstore-prev-powertool{{ .Values.global.domain }}/ https://webstore-prev-safetygear{{ .Values.global.domain }}/ https://webstore-znode10-amazon-stage.amla.io/ https://webstore-znode10-prev-amazon-stage.amla.io/ https://{{ $.Values.global.webstoreURL}}/ https://webstore-preview{{ $.Values.global.domain }}/ *.braintreegateway.com *.braintree-api.com *.googleapis.com 'unsafe-inline' 'unsafe-eval'"
+      X_CONTENT_TYPE_OPTIONS: "nosniff"
+      PERMISSIONS_POLICY: "camera=(self), fullscreen=(self), geolocation=(self)"
+      REFERRER_POLICY: "strict-origin-when-cross-origin"
+      NEXTAUTH_URL: "https://{{ $.Values.global.webstoreURL}}/"
+      DEFAULT_THEME: "base"
+      STORAGE: "REDIS"
+      ENABLE_PAGE_CACHE: "true"
+      APP_NAME: "WEBSTORE"
+      CACHE_MEMORY: "REDIS"
+      IS_301_REDIRECT: "true"
+      NEXT_PUBLIC_GEO_CODE_URL: "https://maps.googleapis.com/maps/api/geocode/json"
+      NEXT_PUBLIC_GOOGLE_MAP_API_KEY: "AIzaSyDzQcVG1LYGzI8U7IlQwuZcl8S6eSxRLzc"
+      STRICT_TRANSPORT_SECURITY: "max-age=31536000; includeSubDomains; preload"
+      IS_INGRESS_ENABLED: "true"
+
+  znode10xpagebuilder:
+    enableService: true
+    serviceType: ClusterIP
+    port: 443
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 2
+    image:
+      name: znode10pagebuilder
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "500Mi"
+        cpu: "200m"
+      limits:
+        memory: "700Mi"
+        cpu: "300m"
+    configmap:
+      TZ: "America/New_York"
+      PORT: "443"
+      NODE_ENV: "production"
+      NEXTAUTH_SECRET: "ABCDEF"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      NX_DAEMON: "false"
+      NX_DISABLE_DB: "true"
+      REDIS_CONNECTION_STRING: "redis://rediswebstore.{{ .Release.Namespace }}:6379"
+      API_URL: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local/"
+      # API_CP_URL: "https://api-cp-qa-znode.amla.io/"
+      WEBSTORE_DOMAIN_NAME: "pagebuilder{{ $.Values.global.domain }}"
+      LOGGING_METHOD: "API"
+      API_DOMAIN: "knoxapi{{ $.Values.global.domain }}"
+      API_Domain_Key: "{{ .Values.global.key.domainkey }}"
+      API_V2_DOMAIN: "api-v2{{ $.Values.global.domain }}"
+      API_KEY: "{{ .Values.global.key.domainkey }}"
+      IS_INGRESS_ENABLED: "true"

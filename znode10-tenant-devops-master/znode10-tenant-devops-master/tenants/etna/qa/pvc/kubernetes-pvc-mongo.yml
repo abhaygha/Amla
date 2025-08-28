@@ -1,0 +1,31 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-db-pv
+spec:
+  capacity:
+    storage: 30Gi
+  accessModes:
+  - ReadWriteMany
+  azureFile:
+    secretName: filesharesecret # Azure storage secret
+    shareName: z10-mongo-db # Azure File share for master
+    readOnly: false
+  storageClassName: "" # Empty for manual provisioning
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-db-pvc
+  namespace: znode # Namespace for Redis
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 30Gi
+  storageClassName: "" # Matches the PV storage class
+---
+
+

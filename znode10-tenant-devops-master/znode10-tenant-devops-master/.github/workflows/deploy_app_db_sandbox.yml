@@ -1,0 +1,311 @@
+name: Deploy DB and App on Tenants
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        description: Select Environment
+        required: true
+        options:
+          - sandbox
+
+      services:
+        description: 'Deploy Build from Prod ACR (Set the following values to true)'
+        required: false
+        default: '{"wbst": false, "pgbld": false, "admin": false, "api": false, "gateway": false, "table": false, "v2": false, "custom": false, "a-commerce": false, "portal": false, "paymngr": false, "spreedly": false, "braintree": false, "azfunction": false, "reports": false, "shipping": false, "fedex": false, "ups": false, "taxmng": false, "avatax": false }' 
+        type: string
+
+      trigger_db_deploy:
+        description: 'Deploy Databases'
+        required: false
+        default: false
+        type: boolean
+
+      all:
+        description: 'Deploy All Services to Tenant'
+        required: false
+        default: false
+        type: boolean
+
+      release_version_number:
+        description: 'Enter prod acr build number to deploy'
+        required: true
+        type: string
+
+      choice:
+        description: 'Send email notification?'
+        type: choice
+        required: false
+        options:
+          - 'Yes'
+          - 'No'
+
+env:
+  IMAGE_TAG: ${{ inputs.release_version_number }}
+
+jobs:
+  # Parse the JSON input and create an environment variable listing all services that need deployment
+  parse_services:
+    runs-on: ubuntu-latest
+    outputs:
+      services_list: ${{ steps.set_services.outputs.services_list }}
+    steps:
+      - name: Parse services JSON
+        id: set_services
+        run: |
+          SERVICES=$(echo '${{ github.event.inputs.services }}' | jq -r 'to_entries[] | select(.value == true) | .key' | paste -sd "," -)
+          echo "::set-output name=services_list::${SERVICES}"
+
+      - name: Debug services list
+        run: |
+          echo "Services list: ${{ steps.set_services.outputs.services_list }}"
+
+  trigger_db_deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    if: github.event.inputs.trigger_db_deploy == 'true'
+    steps:
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_PROD }}
+
+      - name: DB Trigger 
+        run: |
+          curl -X POST \
+          -H "Authorization: token ${{ secrets.ACCESS_REPO }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/MRRSoft/znode10-tenant-devops/actions/workflows/db_deploy_on_tenants.yml/dispatches \
+          -d '{
+            "ref": "master",
+            "inputs": {
+            "environment": "${{ inputs.environment }}"
+                  }
+            }'
+
+#############################################################################################################
+
+
+      
+  deploy_apps:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: parse_services
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+
+      - name: Set Environment Path
+        id: set_env_path
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "sandbox" ]]; then
+            echo "env_path=tenants/sandbox" >> $GITHUB_ENV
+          fi
+
+      - name: Checkout Code
+        uses: actions/checkout@v2
+        with: 
+          ref: master
+          
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up Kubeconfig
+        run: |
+            mkdir -p ~/.kube
+            echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+        shell: bash
+
+      - name: Docker Login to Prod ACR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.PROD_ACR_SERVER }}
+          username: ${{ secrets.ACRUNPROD }}
+          password: ${{ secrets.ACRPWPROD }}    
+
+      - name: API Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'api') || github.event.inputs.all == 'true'
+        run: |
+          ls -ltr
+          pwd
+          kubectl apply -f configmap/kube-api-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-api.yml -n znode
+          kubectl set image deployment/znode10xapi znode10xapicontainer=${{ secrets.PROD_ACR_SERVER }}/znode10api:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: API-V2 Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'v2') || github.event.inputs.all == 'true'
+        run: |
+          kubectl apply -f configmap/kube-api-v2-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-api-v2.yml -n znode 
+          kubectl set image deployment/znode10xapiv2 znode10xapiv2=${{ secrets.PROD_ACR_SERVER }}/znode10apiv2:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: Admin Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'admin') || github.event.inputs.all == 'true'
+        run: |
+          kubectl apply -f configmap/kube-admin-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-admin.yml -n znode 
+          kubectl set image deployment/znode10xadmin znode10xadmin=${{ secrets.PROD_ACR_SERVER }}/znode10admin:${{ env.IMAGE_TAG }} -n znode --record
+                   
+      - name: Custom API Image
+        working-directory: ${{ env.env_path }}
+        if: (contains(needs.parse_services.outputs.services_list, 'custom') || github.event.inputs.all == 'true')
+        run: |
+          kubectl apply -f configmap/kube-customapi-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-custom-api.yml -n znode
+          kubectl set image deployment/znode10customapi znode10customapicontainer=${{ secrets.PROD_ACR_SERVER }}/znode10customapi:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: Custom Table Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'table') || github.event.inputs.all == 'true'
+        run: |
+          kubectl apply -f configmap/kube-customtable-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-customtable.yml -n znode
+          kubectl set image deployment/znode10xcustomtable znode10xcustomtable=${{ secrets.PROD_ACR_SERVER }}/znode10customtable:${{ env.IMAGE_TAG }} -n znode --record
+
+
+      - name: Payment-Manager Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'paymngr') || github.event.inputs.all == 'true'
+        run: |
+          kubectl apply -f configmap/kube-payment-manager-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-payment-manager.yml -n znode
+          kubectl set image deployment/znode10xpaymentmanager znode10xpaymentmanager=${{ secrets.PROD_ACR_SERVER }}/znode10paymentmanager:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: Braintree Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'braintree') || github.event.inputs.all == 'true'
+        run: |
+          kubectl apply -f configmap/kube-plugin-braintree-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-plugin-braintree.yml -n znode
+          kubectl set image deployment/znode10xpluginbraintree znode10xpluginbraintree=${{ secrets.PROD_ACR_SERVER }}/znode10pluginpaymentbraintree:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: Spreadly Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'spreedly') || github.event.inputs.all == 'true'
+        run: |
+          kubectl apply -f configmap/kube-plugin-spreedly-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-plugin-spreedly.yml -n znode
+          kubectl set image deployment/znode10xpluginspreedly znode10xpluginspreedly=${{ secrets.PROD_ACR_SERVER }}/znode10pluginpaymentspreedly:${{ env.IMAGE_TAG }} -n znode --record
+
+
+      - name: Webstore Image
+        working-directory: ${{ env.env_path }}
+        if: (contains(needs.parse_services.outputs.services_list, 'wbst') || github.event.inputs.all == 'true')
+        run: |
+          kubectl apply -f configmap/kube-webstore-config.yml --record -n znode          
+          kubectl apply -f deploy/app/pods/kube-deploy-webstore.yml -n znode 
+          kubectl set image deployment/znode10xwebstore znode10xwebstore=${{ secrets.PROD_ACR_SERVER }}/znode10webstore:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: Pagebuilder Image
+        working-directory: ${{ env.env_path }}
+        if: (contains(needs.parse_services.outputs.services_list, 'pgbld') || github.event.inputs.all == 'true')
+        run: |
+          kubectl apply -f configmap/kube-pagebuilder-config.yml --record -n znode          
+          kubectl apply -f deploy/app/pods/kube-deploy-pagebuilder.yml -n znode 
+          kubectl set image deployment/znode10xpagebuilder znode10xpagebuilder=${{ secrets.PROD_ACR_SERVER }}/znode10pagebuilder:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: Api-Cp Image
+        working-directory: ${{ env.env_path }}
+        if: (contains(needs.parse_services.outputs.services_list, 'a-commerce') || github.event.inputs.all == 'true') && github.event.inputs.environment != 'etnadev'
+        run: |
+          kubectl apply -f configmap/kube-api-cp-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-api-cp.yml -n znode
+          kubectl set image deployment/znode10apicp znode10apicpcontainer=${{ secrets.PROD_ACR_SERVER }}/znode10commerceportalapiimage:${{ env.IMAGE_TAG }} -n znode --record
+
+
+      - name: Commerceportal Image
+        working-directory: ${{ env.env_path }}
+        if: (contains(needs.parse_services.outputs.services_list, 'portal') || github.event.inputs.all == 'true' )
+        run: |
+          kubectl apply -f configmap/kube-cp-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-cp.yml -n znode 
+          kubectl set image deployment/znode10xcp znode10xcp=${{ secrets.PROD_ACR_SERVER }}/znode10cpportalimage:${{ env.IMAGE_TAG }} -n znode --record  
+
+      - name: API Gateways Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'gateway') || github.event.inputs.all == 'true'
+        run: |
+          kubectl apply -f configmap/kube-apigateways-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-apigateways.yml -n znode
+          kubectl set image deployment/znode10xapigateways znode10xapigateways=${{ secrets.PROD_ACR_SERVER }}/znode10apigateways:${{ env.IMAGE_TAG }} -n znode --record
+           
+      - name: Report API Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'reports') || github.event.inputs.all == 'true'
+        run: |
+          kubectl apply -f configmap/kube-reports-config.yml --record -n znode
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-reports.yml -n znode
+          kubectl set image deployment/znode10xreports znode10xreportapi=${{ secrets.PROD_ACR_SERVER }}/znode10reportapi:${{ env.IMAGE_TAG }} -n znode --record
+
+
+      - name: Azure Function Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'azfunction') || github.event.inputs.all == 'true'
+        run: |
+          cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+          kubectl apply -f deploy/app/pods/kube-deploy-azfunctions.yml -n znode
+          kubectl set image deployment/znode10xazfunctions znode10xazfunctions=${{ secrets.PROD_ACR_SERVER }}/znode10azurefunctionimage:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: Azure Shipping Manager Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'shipping') || github.event.inputs.all == 'true'
+        run: |
+            cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+            kubectl apply -f deploy/app/pods/kube-deploy-shipping-manager.yml -n znode
+            kubectl set image deployment/znode10xshippingmanager znode10xshippingmanager=${{ secrets.PROD_ACR_SERVER }}/znodeshippingmanagerapi:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: Azure Fedex Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'fedex') || github.event.inputs.all == 'true'
+        run: |
+                cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+                kubectl apply -f deploy/app/pods/kube-deploy-plugin-fedex.yml -n znode
+                kubectl set image deployment/znode10xpluginfedex znode10xpluginfedex=${{ secrets.PROD_ACR_SERVER }}/znodepluginshippingfedexapi:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: Azure ups Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'fedex') || github.event.inputs.all == 'true'
+        run: |
+                cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+                kubectl apply -f deploy/app/pods/kube-deploy-plugin-ups.yml -n znode
+                kubectl set image deployment/znode10xpluginups znode10xpluginups=${{ secrets.PROD_ACR_SERVER }}/znodepluginshippingupsapi:${{ env.IMAGE_TAG }} -n znode --record
+
+
+      - name: Azure Taxmanager Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'taxmng') || github.event.inputs.all == 'true'
+        run: |
+                kubectl apply -f configmap/kube-tax-manager-config.yml --record -n znode
+                cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+                kubectl apply -f deploy/app/pods/kube-deploy-plugin-fedex.yml -n znode
+                kubectl set image deployment/znode10xtaxmanager znode10xtaxmanager=${{ secrets.PROD_ACR_SERVER }}/znodetaxmanagerapi:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: Azure Avatax Image
+        working-directory: ${{ env.env_path }}
+        if: contains(needs.parse_services.outputs.services_list, 'avatax') || github.event.inputs.all == 'true'
+        run: |
+                kubectl apply -f configmap/kube-avatax-config.yml --record -n znode
+                cd /home/runner/work/znode10-tenant-devops/znode10-tenant-devops/${{ env.env_path }}/
+                kubectl apply -f deploy/app/pods/kube-deploy-plugin-ups.yml -n znode
+                kubectl set image deployment/znode10xavatax znode10xavatax=${{ secrets.PROD_ACR_SERVER }}/znodeplugintaxavataxapi:${{ env.IMAGE_TAG }} -n znode --record
+
+      - name: Docker Logout from Prod
+        if: always()
+        continue-on-error: true
+        run: docker logout ${{ secrets.PROD_ACR_SERVER }}

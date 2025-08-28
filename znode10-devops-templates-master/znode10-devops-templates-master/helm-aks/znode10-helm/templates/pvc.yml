@@ -1,0 +1,79 @@
+{{- range $name, $svc := .Values.resources }}
+  {{- $storages := (kindIs "slice" $svc.storage) | ternary $svc.storage (list ($svc.storage | default dict)) }}
+  {{- range $vol := $storages }}
+    {{- if and $vol (hasKey $vol "enabled") $vol.enabled (ne $.Values.global.clusterType "none") }}
+
+      {{- $existing := (lookup "v1" "PersistentVolumeClaim" $.Release.Namespace (printf "%s-%s-pvc" $name ($vol.name | default "storage"))) }}
+      {{- if or (not $existing) (not (hasKey $existing.metadata "deletionTimestamp")) }}
+
+        {{- if eq $.Values.global.clusterType "aks" }}
+# PV for Azure Blob
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ $name }}-{{ $vol.name | default "storage" }}-pv
+spec:
+  capacity:
+    storage: {{ $vol.size | default "1Gi" }}
+  accessModes:
+    {{- range $mode := $vol.accessModes }}
+    - {{ $mode }}
+    {{- end }}
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ $vol.storageClass | default "azure-blob-sc" }}
+  volumeMode: Filesystem
+  csi:
+    driver: blob.csi.azure.com
+    volumeHandle: "{{ $name }}-{{ $vol.name | default "storage" }}-pv"
+    readOnly: {{ $vol.readOnly | default false }}
+    volumeAttributes:
+      containerName: "{{ $vol.containerName }}"
+      storageAccount: "{{ $vol.accountName | default ($.Values.storage.name | default "") }}"
+      protocol: fuse
+    nodeStageSecretRef:
+      name: "{{ $vol.secretName | default "znode10storage" }}"
+      namespace: znode
+---
+# PVC for Azure Blob
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-{{ $vol.name | default "storage" }}-pvc
+  namespace: {{ $.Release.Namespace }}
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  accessModes:
+    {{- range $mode := $vol.accessModes }}
+    - {{ $mode }}
+    {{- end }}
+  resources:
+    requests:
+      storage: {{ $vol.size | default "1Gi" }}
+  storageClassName: {{ $vol.storageClass | default "azure-blob-sc" }}
+  volumeMode: Filesystem
+  volumeName: {{ $name }}-{{ $vol.name | default "storage" }}-pv
+---
+        {{- else }}
+# PVC for local cluster
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-{{ $vol.name | default "storage" }}-pvc
+  namespace: {{ $.Release.Namespace }}
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ $vol.size | default "1Gi" }}
+  storageClassName: {{ $vol.storageClass | default "local-path" }}
+  volumeMode: Filesystem
+---
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}

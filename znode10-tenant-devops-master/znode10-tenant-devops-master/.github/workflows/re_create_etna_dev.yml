@@ -1,0 +1,120 @@
+name: Re-creating etna Pods
+on:
+  workflow_dispatch:
+    inputs:
+      choice:
+        description: 'Send email notification?'
+        type: choice
+        options:
+          - 'Yes'
+          - 'No'
+
+  # push:
+  #   branches:
+  #     - Dev-935-create-new-env-etna 
+     
+
+jobs:
+  deploy_build_on_aks_etna:
+    name: Re-creating Pods
+    runs-on: ubuntu-latest
+    environment: etnadev
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+        with: 
+            ref: master
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          version: '1.19.9'
+            
+      - name: delete znode pods
+        working-directory: ./tenants/etna/dev/deploy/app/
+        run: kubectl delete -f pods -n znode
+
+  setup_terraform:
+      runs-on: ubuntu-latest
+      environment: etnadev
+      needs: deploy_build_on_aks_etna
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v2
+          with:
+            ref: master
+            
+        - name: Login to Azure
+          uses: azure/login@v1
+          with:
+            creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+        - name: Set up Kubeconfig
+          run: |
+              mkdir -p ~/.kube
+              echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          shell: bash
+        
+        - name: Delete existing ConfigMaps
+          run: |
+           kubectl delete configmap znode10customapi -n znode
+           kubectl delete configmap znode10xadmin  -n znode
+           kubectl delete configmap znode10xapi  -n znode
+           kubectl delete configmap znode10xapigateways  -n znode
+           kubectl delete configmap znode10xapiv2   -n znode
+           kubectl delete configmap znode10xcustomtable   -n znode
+           kubectl delete configmap znode10xpayment  -n znode
+           kubectl delete configmap znode10xwebstore  -n znode
+
+        - name: Terraform Init and Apply
+          working-directory: ./tenants/etna/dev/terraform
+          run: |
+            terraform init
+            terraform apply -auto-approve
+            
+        - name: create znode pods
+          working-directory: ./tenants/etna/dev/deploy/app/
+          run: kubectl create -f pods -n znode
+
+  email_alerts:
+        name: Send Email Notification
+        runs-on: ubuntu-latest
+        needs: setup_terraform
+        if: ${{ github.event.inputs.choice == 'Yes' }}
+        steps:
+          - name: Set Email Subject and Body
+            id: set_email_content
+            run: |
+              STATUS=${{ job.status }}
+              DEPLOYMENT_TIME=$(TZ='Asia/Kolkata' date +"%Y-%m-%d %H:%M:%S")
+              if [ "${STATUS}" == "success" ]; then
+                SUBJECT="Znode10 etna build - *Success*"
+                BODY="Hi Team,<br><font color='green'>The deployment status of Znode10 etna is done successfully.</font><br><br><b>Deployment Time:</b> ${DEPLOYMENT_TIME}"
+              else
+                SUBJECT="Znode10 etna build - *Failed*"
+                BODY="Hi Team,<br><font color='red'>The deployment status of Znode10 etna has failed.</font><br><br><b>Deployment Time:</b> ${DEPLOYMENT_TIME}"
+              fi
+              echo "subject=${SUBJECT}" >> $GITHUB_ENV
+              echo "body=${BODY}" >> $GITHUB_ENV
+    
+          - name: Send Email
+            env:
+              EMAIL_TO: "znode-mission@mrrsoft.com,aatul.palandurkar@amla.io,anup.gaherwar@amla.io,sagar.sapkal@amla.io,pravin.giradkar@amla.io,akash.kelkar@amla.io,dushyant.kawishwar@amla.io"
+              EMAIL_FROM: "tfsalert@amla.io"
+              EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+              TRIGGERED_BY: ${{ github.actor }}
+              SUBJECT: ${{ env.subject }}
+              BODY: ${{ env.body }}
+            run: |
+              IFS=',' read -r -a EMAIL_ARRAY <<< "${EMAIL_TO}"
+              BODY="${BODY} <br>This build was triggered by: ${TRIGGERED_BY}."
+              for EMAIL in "${EMAIL_ARRAY[@]}"; do
+                echo "Sending email to ${EMAIL}"  # Debug statement
+                echo -e "Subject:${SUBJECT}\nContent-Type: text/html\n\n${BODY}" | \
+                curl --url 'smtps://smtp.gmail.com:465' --ssl-reqd \
+                  --mail-from "${EMAIL_FROM}" --mail-rcpt "${EMAIL}" \
+                  --user "${EMAIL_FROM}:${EMAIL_PASSWORD}" \
+                  --upload-file -
+              done

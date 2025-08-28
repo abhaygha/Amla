@@ -1,0 +1,80 @@
+name: Build & push production DB image to ACR
+ 
+on:
+  #release:
+  #    types: [published]
+  #schedule:
+    #- cron:  '5 6,18 * * *' #Triggers the workflow every day at 6:05 and 18:05 UTC
+  #push:
+  #  branches:
+  #      - master
+  workflow_dispatch:
+
+jobs:
+  build_dacpac:
+    name: build dacpac
+    runs-on: windows-latest
+    steps:
+      - name: checkout multifront db repo
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-multifront-db
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: master
+
+      - name: create dacpac
+        run: |
+          & 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\msbuild.exe' /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0  Znode_Multifront/Znode_Multifront_Database.sln /t:Clean,Build
+            dir ${{ github.workspace }}\Znode_Multifront\Znode_Multifront_Database\bin\Debug\
+
+      - name: upload dacpac
+        uses: actions/upload-artifact@v2
+        with:
+          name: multifront-dacpac
+          path: ${{ github.workspace }}\Znode_Multifront\Znode_Multifront_Database\bin\Debug\
+
+  # docker_build_and_push_dacpac:
+  #   name: Build and push production db image to ACR
+  #   runs-on: ubuntu-latest
+
+  #   steps:
+  #     - name: Checkout Code
+  #       uses: actions/checkout@v2
+  #       with: 
+  #           ref: DB-CLI
+
+  #     - name: Setup .Net
+  #       uses: actions/setup-dotnet@v2
+  #       with:
+  #           dotnet-version: 7.0.x
+
+                   
+      # - name: Docker Login
+      #   run: |
+      #     docker login -u znode10xregistry -p wU1hLBHc/0XRcDth+BRnbnmSzYua/7agcuLAlSuqV7+ACRCurRD9 znode10xregistry.azurecr.io
+      #    # docker login -u ${{ secrets.ACRUsernameProd }} -p ${{ secrets.ACRPasswordProd }} znode10xregistry.azurecr.io
+            
+      # - name: Docker Compose Build 
+      #   working-directory: ./Znode_Multifront/Znode_Multifront_Database/DockerDesktop
+      #   run: docker compose -f docker-compose.yml --env-file .env.production build 
+        
+      # - name: Docker Compose Push 
+      #   working-directory: ./Znode_Multifront/Znode_Multifront_Database/DockerDesktop
+      #   run: docker compose -f docker-compose.yml --env-file .env.production  push --ignore-push-failures
+             
+      # - name: Docker Compose Build Latest
+      #   working-directory: ./Znode_Multifront/Znode_Multifront_Database/DockerDesktop
+      #   run: docker compose -f docker-compose-production-latest.yml --env-file .env.production build 
+        
+      # - name: Docker Compose Push Latest
+      #   working-directory: ./Znode_Multifront/Znode_Multifront_Database/DockerDesktop
+      #   run: docker compose -f docker-compose-production-latest.yml --env-file .env.production  push --ignore-push-failures
+         
+
+      # - name: Docker Logout
+      #   if: always()
+      #   continue-on-error: true
+      #   run: docker logout znode10xregistry.azurecr.io
+ 
+      
+

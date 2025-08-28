@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: znode10xcustomer-config
+data:
+  TZ: "America/New_York"
+  ASPNETCORE_HTTPS_PORT: "https://+:443"
+  ASPNETCORE_Kestrel__Certificates__Default__Password: "Amla@987"
+  ASPNETCORE_Kestrel__Certificates__Default__Path: "/app/pfx/amla.io.pfx"
+  ASPNETCORE_URLS: "https://+:443;http://+:80"
+  ASPNETCORE_CULTURE: "en_US.UTF-8"
+  ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+  Caching__Type: "ZnodeRedisCache"
+  Caching__RedisCacheConnectionString: "znode10redistrng.znode:6379"
+  ConnectionStrings__ZnodeECommerceDB: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=wbst_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__Znode_Entities: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=wbst_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodePublish_Entities: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=wbst_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodeKlaviyo_Entities: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=wbst_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodeFramework_Entities: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=wbst_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__HangfireConnection: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=hgfr_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodeRecommendationDB: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=rceg_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodeRecommendation_Entities: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=rceg_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  appsettings__ElasticSearchRootUri: "http://znode10xelasticsearch.znode:9200"
+  appsettings__ProductPublishChunkSize: "200"
+  appsettings__IndexChunkSizeOnCategoryPublish: "200"
+  appsettings__PublishProductFetchChunkSize: "10000"
+  appsettings__SearchIndexChunkSize: "500"
+  appsettings__PublishCatalogConnectionTime: "60"
+  EventBus__RabbitMQConnectionString: "amqp://guest:guest@znode10xrabbitmq.znode:5672"
+  EventBus__RabbitMQManagementUrl: "http://znode10xrabbitmq.znode:15672"

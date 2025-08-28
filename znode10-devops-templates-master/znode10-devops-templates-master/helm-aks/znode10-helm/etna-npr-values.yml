@@ -1,0 +1,10 @@
+global:
+resources:
+  znode10xapi:
+    configmap:
+      appsettings__IsSeparatedQuantityByLineItem: "true"
+      appsettings__WebhookRequestTimeoutInSeconds: "30"
+      
+  znode10xapiv2:
+    configmap:
+      appsettings__WebhookRequestTimeoutInSeconds: "30"

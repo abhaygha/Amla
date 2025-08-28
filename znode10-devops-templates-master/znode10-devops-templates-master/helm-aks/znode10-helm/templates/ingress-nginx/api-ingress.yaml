@@ -1,0 +1,47 @@
+{{- if (and .Values.ingress (or .Values.ingress.enabled true)) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: znode10-ingress
+  annotations:
+    znodekube.version: "10.0"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/enable-gzip: "true"
+    nginx.ingress.kubernetes.io/gzip-types: "application/json text/css application/javascript text/html application/xml"
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "32k"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/use-http2: "true"
+spec:
+  ingressClassName: {{ .Values.global.ingressClassName | default "nginx" }}
+
+  tls:
+    - hosts:
+        {{- range .Values.ingress.tls.services }}
+        - {{ . }}{{ $.Values.global.domain }}
+        {{- end }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  rules:
+    {{- range .Values.ingress.rules }}
+    {{- $svcName := .serviceName }}
+    {{- $svcPort := .servicePort }}
+    - host: {{ .name }}{{ $.Values.global.domain }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $svcName }}
+                port:
+                  number: {{ $svcPort }}
+          {{- end }}
+    {{- end }}
+{{- end }}

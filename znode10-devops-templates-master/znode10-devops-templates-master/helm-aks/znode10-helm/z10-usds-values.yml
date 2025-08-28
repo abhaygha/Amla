@@ -1,0 +1,29 @@
+global:
+
+webIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret
+    services:
+    - hardware
+    - hardware-prev
+
+  rules:
+  - name: hardware
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: hardware-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+resources:
+  znode10xpluginspreedly:
+    configmap:
+      Spreedly__EnvironmentKey: "7HSS3HGTS88NQRRHK9ES2DQ1WA"

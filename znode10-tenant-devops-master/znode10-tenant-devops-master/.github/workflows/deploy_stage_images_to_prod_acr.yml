@@ -1,0 +1,321 @@
+name: Deploy Stage Images to Production ACR
+
+on:
+  workflow_dispatch:
+  
+    inputs:
+      services:
+        description: 'Push Images to Prod ACR (Set the following values to true)'
+        required: false
+        default: '{"wbst": false, "pgbld": false, "admin": false, "api": false, "gateway": false, "table": false, "v2": false, "custom": false, "a-commerce": false, "portal": false, "paymngr": false, "spreedly": false, "braintree": false, "reports": false, "azfunction": false, "shipping": false, "fedex": false, "ups": false, "taxmng": false, "avatax": false, "graphql": false}'
+        type: string
+
+      all:
+        description: 'Push ALL Images to Prod ACR (Set to true to push all images)'
+        required: false
+        default: false
+        type: boolean
+
+      build_number:
+        description: 'Enter Stage build number to retag for prod acr'
+        required: true
+        type: string
+      
+      release_version_number:
+        description: 'Current Release version'
+        required: true
+        type: string
+        
+env:
+  RELEASE_VERSION_TAG: z10-bkp-${{ github.run_number }}-$(date +'%Y%m%d-%H%M%S')
+
+jobs:
+  # Parse the JSON input and create an environment variable listing all services that need deployment
+  parse_services:
+    runs-on: ubuntu-latest
+    outputs:
+      services_list: ${{ steps.set_services.outputs.services_list }}
+    steps:
+      - name: Parse services JSON
+        id: set_services
+        run: |
+          SERVICES=$(echo '${{ github.event.inputs.services }}' | jq -r 'to_entries[] | select(.value == true) | .key' | paste -sd "," -)
+          echo "::set-output name=services_list::${SERVICES}"
+
+      - name: Debug services list
+        run: |
+          echo "Services list: ${{ steps.set_services.outputs.services_list }}"
+
+
+
+  pushing_stage_images_prod_acr:
+    name: Push Stage Images to Production ACR
+    needs: parse_services
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      
+      - name: Docker Login to QA ACR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.Z10ST_ACR_SERVER }}
+          username: ${{ secrets.Z10ST_ACR_UN  }}
+          password: ${{ secrets.Z10ST_ACR_PW }}
+
+      - name: Define Build Number
+        run: echo "BUILD_NUMBER=${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Docker Pull WebStore Image
+        if: contains(needs.parse_services.outputs.services_list, 'wbst') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xwebstoreimage:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xwebstoreimage:${{ inputs.build_number }}  ${{ secrets.PROD_ACR_SERVER }}/znode10webstore:${{ inputs.release_version_number }}
+
+      - name: Docker Pull Pagebuilder Image
+        if: contains(needs.parse_services.outputs.services_list, 'pgbld') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xpagebuilder:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xpagebuilder:${{ inputs.build_number }}  ${{ secrets.PROD_ACR_SERVER }}/znode10pagebuilder:${{ inputs.release_version_number }}     
+
+      - name: Docker Pull API Image
+        if: contains(needs.parse_services.outputs.services_list, 'api') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xapiimage:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xapiimage:${{ inputs.build_number }}  ${{ secrets.PROD_ACR_SERVER }}/znode10api:${{ inputs.release_version_number }}
+
+      - name: Docker Pull API-v2 Image
+        if: contains(needs.parse_services.outputs.services_list, 'v2') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10apiv2:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10apiv2:${{ inputs.build_number }}  ${{ secrets.PROD_ACR_SERVER }}/znode10apiv2:${{ inputs.release_version_number }}      
+
+      - name: Docker Pull Admin Image
+        if: contains(needs.parse_services.outputs.services_list, 'admin') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xadminimage:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xadminimage:${{ inputs.build_number }}  ${{ secrets.PROD_ACR_SERVER }}/znode10admin:${{ inputs.release_version_number }}
+                  
+      - name: Docker Pull API Gateways Image
+        if: contains(needs.parse_services.outputs.services_list, 'gateway') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xapigateways:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xapigateways:${{ inputs.build_number }}  ${{ secrets.PROD_ACR_SERVER }}/znode10apigateways:${{ inputs.release_version_number }}
+                       
+      - name: Docker Pull Custom API Image
+        if: contains(needs.parse_services.outputs.services_list, 'custom') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10customapi:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10customapi:${{ inputs.build_number }}  ${{ secrets.PROD_ACR_SERVER }}/znode10customapi:${{ inputs.release_version_number }}
+
+      - name: Docker Pull Custom Table Image
+        if: contains(needs.parse_services.outputs.services_list, 'table') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xcustomtableimage:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xcustomtableimage:${{ inputs.build_number }}  ${{ secrets.PROD_ACR_SERVER }}/znode10customtable:${{ inputs.release_version_number }}         
+
+
+      - name: Docker Pull Payment Manager Image
+        if: contains(needs.parse_services.outputs.services_list, 'paymngr') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xpaymentmanager:${{ inputs.build_number }}
+          docker tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xpaymentmanager:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znode10paymentmanager:${{ inputs.release_version_number }}
+
+      - name: Docker Pull Braintree Image
+        if: contains(needs.parse_services.outputs.services_list, 'braintree') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xpluginpaymentbraintree:${{ inputs.build_number }}
+          docker tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xpluginpaymentbraintree:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znode10pluginpaymentbraintree:${{ inputs.release_version_number }}
+
+      - name: Docker Pull Spreadly Image
+        if: contains(needs.parse_services.outputs.services_list, 'spreedly') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xpluginpaymentspreedly:${{ inputs.build_number }}
+          docker tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xpluginpaymentspreedly:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znode10pluginpaymentspreedly:${{ inputs.release_version_number }}
+
+      - name: Docker Pull Api-cp Image
+        if: contains(needs.parse_services.outputs.services_list, 'a-commerce') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xcommerceportalapiimage:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xcommerceportalapiimage:${{ inputs.build_number }}  ${{ secrets.PROD_ACR_SERVER }}/znode10commerceportalapiimage:${{ inputs.release_version_number }}
+          
+      - name: Docker Pull Commerceportal Image
+        if: contains(needs.parse_services.outputs.services_list, 'portal') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xcpportalimage:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xcpportalimage:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znode10cpportalimage:${{ inputs.release_version_number }}  
+
+      - name: Docker Pull Reports Image
+        if: contains(needs.parse_services.outputs.services_list, 'reports') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xreportapi:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xreportapi:${{ inputs.build_number }}  ${{ secrets.PROD_ACR_SERVER }}/znode10reportapi:${{ inputs.release_version_number }}  
+
+      - name: Docker Pull azfunctions Image
+        if: contains(needs.parse_services.outputs.services_list, 'azfunction') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xazurefunctionimage:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xazurefunctionimage:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znode10azurefunctionimage:${{ inputs.release_version_number }}
+          
+      - name: Docker Pull shippingmanager Image
+        if: contains(needs.parse_services.outputs.services_list, 'shipping') || github.event.inputs.all == 'true'
+        run: |
+            docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znodeshippingmanagerapi:${{ inputs.build_number }}
+            docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znodeshippingmanagerapi:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znodeshippingmanagerapi:${{ inputs.release_version_number }} 
+
+      - name: Docker Pull shippingmanager Image
+        if: contains(needs.parse_services.outputs.services_list, 'fedex') || github.event.inputs.all == 'true'
+        run: |
+            docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znodepluginshippingfedexapi:${{ inputs.build_number }}
+            docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znodepluginshippingfedexapi:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znodepluginshippingfedexapi:${{ inputs.release_version_number }} 
+
+      - name: Docker Pull shippingmanager Image
+        if: contains(needs.parse_services.outputs.services_list, 'ups') || github.event.inputs.all == 'true'
+        run: |
+            docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znodepluginshippingupsapi:${{ inputs.build_number }}
+            docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znodepluginshippingupsapi:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znodepluginshippingupsapi:${{ inputs.release_version_number }} 
+
+      - name: Docker Pull Shipping Manager Image
+        if: contains(needs.parse_services.outputs.services_list, 'shipping') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znodeshippingmanagerapi:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znodeshippingmanagerapi:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znodeshippingmanagerapi:${{ inputs.release_version_number }}
+
+      - name: Docker Pull Fedex Image
+        if: contains(needs.parse_services.outputs.services_list, 'fedex') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znodepluginshippingfedexapi:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znodepluginshippingfedexapi:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znodepluginshippingfedexapi:${{ inputs.release_version_number }}
+
+      - name: Docker Pull Fedex Image
+        if: contains(needs.parse_services.outputs.services_list, 'ups') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znodepluginshippingupsapi:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znodepluginshippingupsapi:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znodepluginshippingupsapi:${{ inputs.release_version_number }} 
+
+
+      - name: Docker Pull taxmanager
+        if: contains(needs.parse_services.outputs.services_list, 'taxmng') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znodetaxmanagerapi:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znodetaxmanagerapi:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znodetaxmanagerapi:${{ inputs.release_version_number }}
+  
+      - name: Docker Pull avatax 
+        if: contains(needs.parse_services.outputs.services_list, 'avatax') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znodeplugintaxavataxapi:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znodeplugintaxavataxapi:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znodeplugintaxavataxapi:${{ inputs.release_version_number }} 
+
+      - name: Docker Pull graphql 
+        if: contains(needs.parse_services.outputs.services_list, 'graphql') || github.event.inputs.all == 'true'
+        run: |
+          docker pull ${{ secrets.Z10ST_ACR_SERVER }}/znode10xgraphqlimage:${{ inputs.build_number }}
+          docker image tag ${{ secrets.Z10ST_ACR_SERVER }}/znode10xgraphqlimage:${{ inputs.build_number }} ${{ secrets.PROD_ACR_SERVER }}/znode10graphqlimage:${{ inputs.release_version_number }} 
+
+      - name: Docker Logout
+        if: always()
+        continue-on-error: true
+        run: docker logout ${{ secrets.Z10ST_ACR_SERVER }}
+
+      - name: Docker Login to Prod ACR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.PROD_ACR_SERVER }}
+          username: ${{ secrets.ACRUNPROD }}
+          password: ${{ secrets.ACRPWPROD }} 
+
+      - name: Docker Push WebStore Image
+        if: contains(needs.parse_services.outputs.services_list, 'wbst') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znode10webstore:${{ inputs.release_version_number }}
+
+      - name: Docker Push Pagebuilder Image
+        if: contains(needs.parse_services.outputs.services_list, 'pgbld') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znode10pagebuilder:${{ inputs.release_version_number }}
+
+      - name: Docker Push API Image
+        if: contains(needs.parse_services.outputs.services_list, 'api') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znode10api:${{ inputs.release_version_number }}
+
+      - name: Docker Push API-v2 Image
+        if: contains(needs.parse_services.outputs.services_list, 'v2') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znode10apiv2:${{ inputs.release_version_number }}
+
+      - name: Docker Push Admin Image
+        if: contains(needs.parse_services.outputs.services_list, 'admin') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znode10admin:${{ inputs.release_version_number }}
+
+      - name: Docker Push API Gateways Image
+        if: contains(needs.parse_services.outputs.services_list, 'gateway') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znode10apigateways:${{ inputs.release_version_number }}
+
+      - name: Docker Push Custom API Image
+        if: contains(needs.parse_services.outputs.services_list, 'custom') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znode10customapi:${{ inputs.release_version_number }}
+
+      - name: Docker Push Custom Table Image
+        if: contains(needs.parse_services.outputs.services_list, 'table') || github.event.inputs.all == 'true'
+        run: |
+          docker push ${{ secrets.PROD_ACR_SERVER }}/znode10customtable:${{ inputs.release_version_number }}
+
+      - name: Docker Push Payment Manager Image
+        if: contains(needs.parse_services.outputs.services_list, 'paymngr') || github.event.inputs.all == 'true'
+        run: |
+          docker push ${{ secrets.PROD_ACR_SERVER }}/znode10paymentmanager:${{ inputs.release_version_number }}
+
+      - name: Docker Push Payment Braintree Image
+        if: contains(needs.parse_services.outputs.services_list, 'braintree') || github.event.inputs.all == 'true'
+        run: |
+          docker push ${{ secrets.PROD_ACR_SERVER }}/znode10pluginpaymentbraintree:${{ inputs.release_version_number }}
+
+      - name: Docker Push Payment Spreedly Image
+        if: contains(needs.parse_services.outputs.services_list, 'spreedly') || github.event.inputs.all == 'true'
+        run: |
+          docker push ${{ secrets.PROD_ACR_SERVER }}/znode10pluginpaymentspreedly:${{ inputs.release_version_number }}
+
+
+      - name: Docker Push Api-cp Image
+        if: contains(needs.parse_services.outputs.services_list, 'a-commerce') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znode10commerceportalapiimage:${{ inputs.release_version_number }}
+
+      - name: Docker Push Commerceportal Image
+        if: contains(needs.parse_services.outputs.services_list, 'portal') || github.event.inputs.all == 'true'
+        run: |
+          docker push ${{ secrets.PROD_ACR_SERVER }}/znode10cpportalimage:${{ inputs.release_version_number }}    
+          docker images
+
+      - name: Docker Push Reports Image
+        if: contains(needs.parse_services.outputs.services_list, 'reports') || github.event.inputs.all == 'true'
+        run: |
+          docker push ${{ secrets.PROD_ACR_SERVER }}/znode10reportapi:${{ inputs.release_version_number }}     
+
+      - name: Docker Push azfunctions Image
+        if: contains(needs.parse_services.outputs.services_list, 'azfunction') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znode10azurefunctionimage:${{ inputs.release_version_number }}
+
+      - name: Docker Push Shipping Manager Image
+        if: contains(needs.parse_services.outputs.services_list, 'shipping') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znodeshippingmanagerapi:${{ inputs.release_version_number }}
+
+      - name: Docker Push Fedex Image
+        if: contains(needs.parse_services.outputs.services_list, 'fedex') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znodepluginshippingfedexapi:${{ inputs.release_version_number }}
+
+      - name: Docker Push ups Image
+        if: contains(needs.parse_services.outputs.services_list, 'ups') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znodepluginshippingupsapi:${{ inputs.release_version_number }}
+
+      - name: Docker Push Taxmanager Image
+        if: contains(needs.parse_services.outputs.services_list, 'taxmng') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znodetaxmanagerapi:${{ inputs.release_version_number }}
+
+      - name: Docker Push avatax Image
+        if: contains(needs.parse_services.outputs.services_list, 'avatax') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znodeplugintaxavataxapi:${{ inputs.release_version_number }}
+        
+      - name: Docker Push graphql Image
+        if: contains(needs.parse_services.outputs.services_list, 'graphql') || github.event.inputs.all == 'true'
+        run: docker push ${{ secrets.PROD_ACR_SERVER }}/znode10graphqlimage:${{ inputs.release_version_number }}
+
+      - name: Docker Logout from Prod
+        if: always()
+        continue-on-error: true
+        run: docker logout ${{ secrets.PROD_ACR_SERVER }}

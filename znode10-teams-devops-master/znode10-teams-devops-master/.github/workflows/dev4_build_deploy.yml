@@ -1,0 +1,44 @@
+name: Trigger - Z10 DEV4
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: Tenant name
+        required: true
+        default: z10
+      environment:
+        description: Target environment (e.g., dev1, dev2, etc.)
+        required: true
+        default: dev4
+      branch:
+        description: Git branch to deploy
+        required: true
+        default: int
+      namespace:
+        description: Target namespace (e.g., znode, dev1)
+        required: true
+        default: znode
+      services:
+        description: Services to Build and Deploy
+        required: true
+        default: '{"wbst": false, "pgbld": false, "admin": false, "api": false, "gateway": false, "customtable": false, "v2": false, "a-commerce": false, "portal": false, "cstm": false, "paymngr": false, "spreedly": false, "braintree": false, "reports": false, "shipping": false, "fedex": false, "ups": false, "azfunction": false, "graphqlapi": false, "taxmanager": false, "avatax": false, "diagno": false, "python": false, "cc-api": false, "cc-admin": false}'
+        type: string
+      all:
+        description: Deploy all services
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  trigger-build-deploy:
+    uses: ./.github/workflows/build-deploy.yaml
+    with:
+      tenant: ${{ inputs.tenant }}
+      environment: ${{ inputs.environment }}
+      branch: ${{ inputs.branch }}
+      namespace: ${{ inputs.namespace }}
+      services: ${{ inputs.services }}
+      all: ${{ inputs.all }}
+      triggered_by: ${{ github.actor }}
+    secrets: inherit

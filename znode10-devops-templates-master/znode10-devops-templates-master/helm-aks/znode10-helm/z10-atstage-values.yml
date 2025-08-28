@@ -1,0 +1,355 @@
+global:
+
+multiwebIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret
+    services:
+    - webstore-api
+    - webstore-api-prev
+    - webstore-multistore-prev
+    - webstore-int-prev
+    - webstore-multistore1
+    - webstore-multistore1-prev
+    - webstore-multistore2
+    - webstore-multistore2-prev
+    - webstore-multistore3
+    - webstore-multistore3-prev
+    - webstore-multistore4
+    - webstore-multistore4-prev
+    - webstore-multistore5
+    - webstore-multistore5-prev
+    - webstore-multistore6
+    - webstore-multistore6-prev
+    - webstore-multistore7
+    - webstore-multistore7-prev
+    - webstore-multistore8
+    - webstore-multistore8-prev
+    - webstore-multistore9
+    - webstore-multistore9-prev
+    - webstore-multistore10
+    - webstore-multistore10-prev
+    - webstore-multistore11
+    - webstore-multistore11-prev
+    - webstore-multistore12
+    - webstore-multistore12-prev
+    - webstore-multistore13
+    - webstore-multistore13-prev
+    - webstore-multistore14
+    - webstore-multistore14-prev
+    - webstore-multistore15
+    - webstore-multistore15-prev
+    - webstore-multistore16
+    - webstore-multistore16-prev
+    - webstore-multistore17
+    - webstore-multistore17-prev
+    - webstore-multistore18
+    - webstore-multistore18-prev
+    - webstore-multistore19
+    - webstore-multistore19-prev
+    - webstore-multistore20
+    - webstore-multistore20-prev
+  rules:
+  - name: webstore-api
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: webstore-api-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: webstore-multistore-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: webstore-int-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: webstore-multistore1
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore1-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore2
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore2-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore3
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore3-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore4
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore4-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore5
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore5-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore6
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore6-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore7
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore7-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore8
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore8-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore9
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore9-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore10
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore10-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore11
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore11-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore12
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore12-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore13
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore13-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore14
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore14-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore15
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore15-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore16
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore16-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore17
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore17-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore18
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore18-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore19
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore19-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore20
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-multistore20-prev
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix

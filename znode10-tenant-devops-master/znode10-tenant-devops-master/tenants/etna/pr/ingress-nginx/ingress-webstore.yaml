@@ -1,0 +1,106 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: webstore-ingress
+  namespace: znode
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - www.etnasupply.com
+    - pagebuilder.etnasupply.com
+    - preview.etnasupply.com
+    secretName: etnasupply-tls-secret
+
+  - hosts:
+    - preview.utssupply.com
+    - www.utssupply.com
+    secretName: utssupply-tls-secret
+    
+  - hosts:
+    - webstore-infusion-pr.amla.io
+    - webstore-preview-infusion-pr.amla.io
+    secretName: amla-webstore-tls
+    
+
+  rules:
+  - host: www.etnasupply.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: znode10xwebstore
+            port:
+              number: 443
+
+  - host: preview.utssupply.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: znode10xwebstore
+            port:
+              number: 443
+
+  - host: preview.etnasupply.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: znode10xwebstore
+            port:
+              number: 443
+
+  - host: www.utssupply.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: znode10xwebstore
+            port:
+              number: 443
+
+  - host: pagebuilder.etnasupply.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: znode10xpagebuilder
+            port:
+              number: 443
+
+    - host: webstore-infusion-pr.amla.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: znode10xwebstore
+                port:
+                  number: 443
+    - host: webstore-preview-infusion-pr.amla.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: znode10xwebstore
+                port:
+                  number: 443
+              

@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    znodekube.version: "10.0"
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    # service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "snet-aks-etna-pr-1"
+  creationTimestamp: null
+  labels:
+    io.znodekube.service: znode10xpagebuilder
+    service: znode10xpagebuilder
+    app: znode10xpagebuilder
+  name: znode10xpagebuilder
+spec:
+  ports:
+  - name: "webstorehttpport"
+    port: 80
+    targetPort: 80
+  type: ClusterIP
+  selector:
+    app: znode10xpagebuilder
+
+# status:
+#   ClusterIP: {}
+---
+
+

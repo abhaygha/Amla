@@ -1,0 +1,17 @@
+---
+# templates/deployment.yaml
+{{- range $name, $svc := .Values.resources }}
+{{- if $svc.enableService | default true }}
+{{ include "znode10.microservice.deployment" (dict 
+  "Values" $.Values 
+  "Release" $.Release 
+  "name" $name 
+  "replicaCount" $svc.replicaCount 
+  "image" $svc.image 
+  "resources" $svc.resources 
+  "enableResources" $svc.enableResources 
+  "configmap" $svc.configmap
+  "Template" $.Template  ) }}
+---
+{{- end }}
+{{- end }}

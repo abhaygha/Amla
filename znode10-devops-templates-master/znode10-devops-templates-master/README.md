@@ -1,0 +1,1 @@
+# znode10-devops-templates

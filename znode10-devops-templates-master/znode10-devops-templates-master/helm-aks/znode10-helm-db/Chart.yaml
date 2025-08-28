@@ -1,0 +1,5 @@
+apiVersion: v2
+name: znode10-helm-db
+description: Helm chart for deploying StatefulSets like Elasticsearch, MongoDB, RabbitMQ
+type: application
+version: 0.1.0

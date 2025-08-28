@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    znodekube.version: "10.0"
+  creationTimestamp: null
+  labels:
+    io.znodekube.service: znode10customapi-artifi
+    service: znode10customapi-artifi
+  name: znode10customapi-artifi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.znodekube.service: znode10customapi-artifi
+      service: znode10customapi-artifi
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+        znodekube.version: "10.0"
+      creationTimestamp: null
+      labels:
+        io.znodekube.network/znode10xapinetwork: "true"
+        io.znodekube.network/znode10xapinetworkexternal: "true"
+        io.znodekube.network/znode10xmongonetwork: "true"
+        io.znodekube.service: znode10customapi-artifi
+        service: znode10customapi-artifi
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: agentpool
+                operator: In
+                values:
+                - znode10upl
+
+      imagePullSecrets:
+      - name: tenantacrsecret
+
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: customapi-artifi-configmap
+        image: az204containerregistery.azurecr.io/znode10customapi:z10-st-75
+        resources:
+          requests:
+            memory: 500Mi
+            cpu: 500m
+          limits:
+            memory: 600Mi
+            cpu: 550m
+
+        imagePullPolicy: Always
+        name: znode10customapicontainer
+        lifecycle:
+          preStop:
+            exec:
+              command: [ "/bin/sh", "-c", "sleep 120" ]
+        ports:
+        - containerPort: 80
+      restartPolicy: Always
+status: {}
+---
+
+

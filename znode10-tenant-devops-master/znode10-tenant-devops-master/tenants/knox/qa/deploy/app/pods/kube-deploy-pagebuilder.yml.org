@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    znodekube.version: "10.0"
+  creationTimestamp: null
+  labels:
+    app: znode10xpagebuilder
+  name: znode10xpagebuilder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: znode10xpagebuilder
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+        znodekube.version: "10.0"
+      creationTimestamp: null
+      labels:
+        network/znode10xapinetworkexternal: "true"
+        app: znode10xpagebuilder
+    spec:
+      terminationGracePeriodSeconds: 100
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: agentpool
+                operator: In
+                values:
+                - znode10upl
+
+      imagePullSecrets:
+      - name: znodenonprodacrsecret
+      # hostAliases:
+      #   - ip: "10.0.37.62"
+      #     hostnames:
+      #       - "api-z10-dev.amla.io"
+      #   - ip: "10.0.241.196"
+      #     hostnames:
+      #       - "webstore-z10-dev.amla.io"
+      #   - ip: "10.0.241.196"
+      #     hostnames:
+      #       - "webstore-qa-pre-znode.amla.io"
+      containers:
+      - envFrom:
+        - configMapRef:
+            name: znode10xpagebuilder
+        image: znode10xregistry.azurecr.io/znode10xpagebuilder:z10-qa
+        imagePullPolicy: Always
+        name: znode10xpagebuilder
+        lifecycle:
+          preStop:
+            exec:
+              command: [ "/bin/sh", "-c", "sleep 100" ]
+        ports:
+        - containerPort: 443
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /app/ssl
+          readOnly: true
+        resources:
+          requests:
+            memory: 800Mi
+            cpu: 250m
+          limits:
+            memory: 1000Mi
+            cpu: 300m
+
+        readinessProbe:
+          exec:
+            command: [ "true" ]
+          initialDelaySeconds: 30
+          periodSeconds: 5
+
+        livenessProbe:
+          exec:
+            command: [ "true" ]
+          initialDelaySeconds: 60
+          periodSeconds: 10
+      restartPolicy: Always
+      volumes:
+      - name: tls-certs
+        secret:
+          secretName: amla-ssl-secret
+status: {}
+---
+
+

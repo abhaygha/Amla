@@ -1,0 +1,193 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10apicp-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10apicp
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10customapi-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10customapi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10admin-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xadmin
+---
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10api-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xapi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10apigateways-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xapigateways
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10azfunctions-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xazfunctions
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10cp-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xcp
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10xapiv2-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xapiv2
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10customtable-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xcustomtable
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10pagebuilder-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xpagebuilder
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10paymentmanager-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xpaymentmanager
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10pluginbraintree-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xpluginbraintree
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10pluginspreedly-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xpluginspreedly
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10rabbitmq-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xrabbitmq
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10reports-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xreports
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10webstore-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xwebstore
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10xshippingmanager-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xshippingmanager
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10xpluginfedex-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xpluginfedex
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: znode10xpluginups-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: znode10xpluginups

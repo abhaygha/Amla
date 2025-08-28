@@ -1,0 +1,80 @@
+global:
+scheduler:
+  enabled: true # Set to true per env when needed
+  # Schedule time: 3:00 AM UTC
+  # Equivalent IST (India Standard Time): 8:30 AM IST
+  # Equivalent ET  (Eastern Time):        11:00 PM ET (previous day, during DST)
+  schedule: "0 3 * * *" # UTC Time: 3:00 AM --> IST Time: 3:00 AM + 5.5 hours = 8:30 AM
+  # schedule: "30 13 * * *" # LOCAL VM IST
+  targetDeployments:
+  - znode10xapi
+  - znode10xadmin
+  - znode10xapiv2
+  - znode10xapicp
+  - znode10xwebstore
+  - znode10xapigateways
+
+resources:
+  znode10xpluginserver:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10xpluginserverimage
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_URLS: "http://+:80"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.znode:27017/Znode_10xFeature_Docker_LogMessage"
+      ConnectionStrings__ZnodeFramework_Entities: "Server=tcp:db-znode10x-ep.database.windows.net,1433;Initial Catalog=wbst_z10x_qa;Persist Security Info=False;User ID=admin-db-znode10x-ep;Password=elPL_WJ@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+      ConnectionStrings__Znode_Plugin_Entities: "Server=tcp:db-znode10x-ep.database.windows.net,1433;Initial Catalog=plugin_z10x_qa;Persist Security Info=False;User ID=admin-db-znode10x-ep;Password=elPL_WJ@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+
+  znode10xclitokenqa:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znodeclitoken
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      TZ: "America/New_York"
+      ASPNETCORE_HTTPS_PORT: "http://+:80"
+      ASPNETCORE_URLS: "http://+:80"
+      ASPNETCORE_CULTURE: "en_US.UTF-8"
+      ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+      CliContext: "Server=tcp:db-znode10x-ep.database.windows.net,1433;Initial Catalog=zcli_z10x_qa;Persist Security Info=False;User ID=admin-db-znode10x-ep;Password=elPL_WJ@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+      ZnodeToken_Entities: "Server=tcp:db-znode10x-ep.database.windows.net,1433;Initial Catalog=zcli_z10x_qa;Persist Security Info=False;User ID=admin-db-znode10x-ep;Password=elPL_WJ@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+
+  znode10xwebstore:
+    configmap:
+      REDIS_SENTINEL_ENABLED: "true"
+
+  znode10xutility:
+    configmap:
+      DB_USER: "admin-db-znode10x-ep"
+      DB_PASSWORD: "elPL_WJ@9#701"
+      DB_SERVER: "db-znode10x-ep.database.windows.net"
+      DB_NAME: "wbst_z10x_qa"

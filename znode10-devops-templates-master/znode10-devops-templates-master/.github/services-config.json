@@ -1,0 +1,20 @@
+[
+  {
+    "service": "webstore",
+    "repository": "MRRSoft/znode-webstore10x-page-builder",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "admin",
+    "repository": "MRRSoft/znode10-admin-migration",
+    "working_directory": "./Znode.Admin",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "api",
+    "repository": "MRRSoft/znode10-api-migration",
+    "working_directory": "./Znode.Multifront",
+    "compose_file": "docker-compose.yml"
+  }
+]

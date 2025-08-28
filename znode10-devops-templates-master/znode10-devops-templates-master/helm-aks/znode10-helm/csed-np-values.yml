@@ -1,0 +1,6 @@
+global:
+
+resources:
+  znode10xpluginspreedly:
+    configmap:
+      Spreedly__EnvironmentKey: "7HSS3HGTS88NQRRHK9ES2DQ1WA"

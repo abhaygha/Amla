@@ -1,0 +1,59 @@
+name: Payment DB Deploy on Tenant DB
+on:
+#  push:
+#    branches:
+#      - master
+ workflow_dispatch:
+   inputs:
+     environment:
+       type: choice
+       description: Select the tenant name
+       required: true
+       options:
+       - uat
+       - evidev
+       - etnadev
+       - sandbox
+jobs:
+  # deploy job
+  Build:
+    # Selecting the windows-latest GitHub-hosted runner
+    runs-on: windows-2019
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+        with:
+           ref: master
+
+      # Login using Azure credentials
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_PROD }}
+
+      - name: download the dacpac
+        run: |
+          az storage file download --path Znode_Multifront_Payment.dacpac --dest .\dacpac\ --share-name payment-dacpac --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }} --account-key ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }} 
+          dir .\dacpac\
+
+      - name: Azure SQL Deploy
+        uses: Azure/sql-action@v1
+        with:
+          # Name of the SQL Server
+          server-name: ${{ secrets.DB_SERVER_NAME }}
+
+      # The connection string, including authentication information for the Azure SQL Database 
+          connection-string: '${{ secrets.PAYMENT_DB_CONNECTION_STRING }}'
+
+      # Path to the dacpac file
+          dacpac-package: .\dacpac\Znode_Multifront_Payment.dacpac
+
+      # Additional arguments 
+          arguments: '/p:BlockOnPossibleDataLoss=false /p:DropObjectsNotInSource=false'
+
+      # Specify target platform version (adjust as needed)
+#          target-platform-version: 'v12.0'
+
+      # Database name provided directly here
+#          database-name: 'pymt_z10'

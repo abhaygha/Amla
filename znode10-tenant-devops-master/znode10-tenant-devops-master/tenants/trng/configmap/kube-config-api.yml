@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: znode10xapi-config
+data:
+  TZ: "America/New_York"
+  ASPNETCORE_HTTPS_PORT: "https://+:443"
+  ASPNETCORE_Kestrel__Certificates__Default__Password: "Amla@987"
+  ASPNETCORE_Kestrel__Certificates__Default__Path: "/app/pfx/amla.io.pfx"
+  ASPNETCORE_URLS: "https://+:443;http://+:80"
+  ASPNETCORE_CULTURE: "en_US.UTF-8"
+  ASPNETCORE_UI_CULTURE: "en_US.UTF-8"
+  Caching__Type: "ZnodeRedisCache"
+  Caching__RedisCacheConnectionString: "znode10redistrng.znode:6379"
+  EventBus__RabbitMQManagementUrl: "http://znode10xrabbitmq.znode:15672"
+  appsettings__PluginApiRootUri: "https://pluginserver.znode.com"
+  appsettings__PaymentApplicationUrl: "https://paymentapi.znode10training.com"
+  appsettings__ZnodePaymentApiDomainName: "paymentapi.znode10training.com"
+  appsettings__EnableTokenBasedAuthorization: "false"
+  appsettings__ValidateAuthHeader: "false"
+  appsettings__ZnodeApiGateway: "https://apigateway.znode10training.com"
+  appsettings__ZnodeEngineApiV2: "https://api-v2.znode10training.com/v2/"
+  ConnectionStrings__ZnodeECommerceDB: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=wbst_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__Znode_Entities: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=wbst_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodePublish_Entities: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=wbst_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodeKlaviyo_Entities: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=wbst_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodeFramework_Entities: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=wbst_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__HangfireConnection: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=hgfr_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodeRecommendationDB: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=rceg_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodeRecommendation_Entities: "Server=tcp:db-znode10x-production-ep.database.windows.net,1433;Initial Catalog=rceg_z10_trng;Persist Security Info=False;User ID=admin-db-znode10x-prod-ep;Password=elPL_Ro@9#701;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+  ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.znode:27017/Znode_10xFeature_Docker_LogMessage"
+  appsettings__AdminWebsiteUrl: "https://admin.znode10training.com"
+  appsettings__AzureBlobConnectionString: "DefaultEndpointsProtocol=https;AccountName=trngdev;AccountKey=OjbYiKKSTJ/ezLCHxP+9aiSr+FrcR5qUMeXhEdy3A9ZPe3K5HgjULDOi2JNSyqe1t649GkCQb5WZ+AStF+PQKw==;EndpointSuffix=core.windows.net"
+  appsettings__AzureBlobCommonContainerName: "znode10-resources"
+  

@@ -1,0 +1,51 @@
+name: Multifront DB Deploy on DEV grow
+on:
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - Dev-935-create-new-env-grow
+
+jobs:
+  # deploy job
+  Build:
+    # Selecting the windows-latest GitHub-hosted runner
+    runs-on: windows-2019
+    environment: growdev
+
+    steps:
+     - name: checkout multifront db repo
+       uses: actions/checkout@v4
+       with: 
+         repository: MRRSoft/znode10-multifront-db
+         token: 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
+         ref: z10-grow-poc
+         path: ${{ github.workspace }}\znode10-multifront-db
+
+     - name: create dacpac
+       run: |
+           & 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\msbuild.exe' /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0  ${{ github.workspace }}/znode10-multifront-db/Znode_Multifront/Znode_Multifront_Database.sln /t:Clean,Build
+           dir ${{ github.workspace }}\znode10-multifront-db\Znode_Multifront\Znode_Multifront_Database\bin\Debug\
+     - uses: azure/login@v1
+       with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_PROD }}
+
+     - name: Azure SQL Deploy
+       uses: Azure/sql-action@v1
+       with:
+          # Name of the SQL Server
+          server-name: ${{ secrets.DB_SERVER_NAME }}
+
+      # The connection string, including authentication information for the Azure SQL Database 
+          connection-string: '${{ secrets.MULTIFRONT_DB_CONNECTION_STRING }}'
+
+      # Path to the Azure file share dacpac file
+          dacpac-package: ${{ github.workspace }}\znode10-multifront-db\Znode_Multifront\Znode_Multifront_Database\bin\Debug\Znode_Multifront_Database.dacpac
+
+      # Additional arguments 
+          arguments: '/p:BlockOnPossibleDataLoss=false /p:DropObjectsNotInSource=false'
+
+   #   Specify target platform version (adjust as needed)
+   #       target-platform-version: 'v12.0'
+
+  #    Database name provided directly here
+    #      database-name: 'wbst_z10'

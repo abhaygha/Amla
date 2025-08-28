@@ -1,0 +1,58 @@
+name: Copy Default data from one blob to another
+on:
+  workflow_dispatch:
+    inputs:
+      SRC_ACCOUNT_NAME:
+        type: string
+        description: Source Storage Account Name
+        required: true
+
+      SRC_ACCOUNT_KEY:
+        type: string
+        description: Source Storage Account Key
+        required: true
+
+      SRC_CONTAINER:
+        type: string
+        description: Source Container Name
+        required: true
+
+      DEST_ACCOUNT_NAME:
+        type: string
+        description: Destination Storage Account Name
+        required: true
+
+      DEST_ACCOUNT_KEY:
+        type: string
+        description: Destination Storage Account Key
+        required: true
+
+      DEST_CONTAINER:
+        type: string
+        description: Destination Container Name
+        required: true
+
+jobs:
+  copy-prod-image-container-files:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS_PROD }}
+
+    - name: Copy Files between Azure Storage Accounts
+      uses: Azure/cli@v1
+      with:
+        inlineScript: |
+          echo "Starting blob copy from '${{ github.event.inputs.SRC_CONTAINER }}' to '${{ github.event.inputs.DEST_CONTAINER }}'..."
+
+          az storage blob copy start-batch \
+            --account-name ${{ github.event.inputs.DEST_ACCOUNT_NAME }} \
+            --account-key ${{ github.event.inputs.DEST_ACCOUNT_KEY }} \
+            --destination-container ${{ github.event.inputs.DEST_CONTAINER }} \
+            --source-account-name ${{ github.event.inputs.SRC_ACCOUNT_NAME }} \
+            --source-account-key ${{ github.event.inputs.SRC_ACCOUNT_KEY }} \
+            --source-container ${{ github.event.inputs.SRC_CONTAINER }}
+
+          echo "Blob copy operation initiated successfully."

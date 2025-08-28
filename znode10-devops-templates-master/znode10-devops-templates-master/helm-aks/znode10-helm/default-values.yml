@@ -1,0 +1,54 @@
+global:
+  tenant: ""
+  environment: ""
+  domain: ""
+  imageRegistry: ""
+  imageTag: ""
+  imagePullSecrets: ""
+  timezone: America/New_York
+  ipRange: ""
+  webstoreURL: ""
+  clusterType: ""
+
+  tenantacr:
+    imageRegistry: ""
+    tag: "" # to be injected dynamically 
+    #imagePullSecrets: tenantacrsecret
+
+  key:
+    domainkey: ""
+
+  newrelic:
+    enabled: false
+    licensekey: ""
+
+  db:
+    wbst_db: ""
+    pymt_db: ""
+    hgfr_db: ""
+    rceg_db: ""
+
+  probes:
+    readiness:
+      delay: 120 # Wait 120 seconds before starting readiness checks
+      period: 20 # Check every 20 seconds
+      timeout: 10 # Allow 10 seconds per readiness check to respond
+      failureThreshold: 15 # Allow 15 failures (~5 minutes total) before marking pod unready
+    liveness:
+      delay: 180 # Wait 180 seconds before starting liveness checks (gives time to fully initialize)
+      period: 30 # Check every 30 seconds
+      timeout: 10 # Wait 10 seconds for liveness probe response
+      failureThreshold: 5 # After 5 failures (~2.5 minutes), restart pod
+
+storage:
+  name: ""
+  connection_string: ""
+  url: ""
+
+subdomains:
+  api: "api"
+  admin: "admin"
+  cp: "commerceportal"
+  apigateways: "apigateways"
+  pagebuilder: "pagebuilder"
+  api-v2: "api-v2"

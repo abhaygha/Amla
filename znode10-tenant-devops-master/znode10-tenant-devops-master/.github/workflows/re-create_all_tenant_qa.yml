@@ -1,0 +1,145 @@
+name: Re-creating Pods
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Choose Environment'
+        type: choice
+        options:
+          - 'etnaqa'
+          - 'knoxqa'
+          - 'klrtnp'
+          - 'etnapr'
+          - 'knoxpr'
+          - 'fwksnp'
+          - 'demostage'
+      restart_all:
+        description: 'Restart all deployments except znode10xrabbitmq?'
+        required: true
+        type: boolean
+      pods_restart_all:
+        description: 'Restart all pods except znode10xrabbitmq?'
+        required: true
+        type: boolean
+
+        
+jobs:
+  setup_terraform:
+    name: Terraform and Pod Creation
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up Kubeconfig
+        run: |
+            mkdir -p ~/.kube
+            echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+            
+        shell: bash
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.4.6 
+          
+      - name: Delete existing ConfigMaps
+        run: |
+          kubectl delete configmap znode10customapi -n znode
+          kubectl delete configmap znode10xadmin -n znode
+          kubectl delete configmap znode10xapi -n znode
+          kubectl delete configmap znode10xapigateways -n znode
+          kubectl delete configmap znode10xcustomtable -n znode
+          kubectl delete configmap znode10xwebstore -n znode
+          kubectl delete configmap znode10apicp -n znode
+          kubectl delete configmap znode10xcp -n znode
+          kubectl delete configmap znode10xpaymentmanager -n znode
+          kubectl delete configmap znode10xpluginbraintree -n znode
+          kubectl delete configmap znode10xpluginspreedly -n znode
+          kubectl delete configmap znode10xreportsapi -n znode
+          kubectl delete configmap znode10xpagebuilder -n znode
+          kubectl delete configmap znode10xapiv2 -n znode
+          kubectl delete configmap znode10xpluginfedex -n znode
+          kubectl delete configmap znode10xshippingmanager -n znode
+
+      - name: Terraform Init and Apply
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "knoxqa" ]; then
+            cd ./tenants/knox/qa/terraform
+          elif [ "${{ github.event.inputs.environment }}" == "etnaqa" ]; then
+            cd ./tenants/etna/qa/terraform
+          elif [ "${{ github.event.inputs.environment }}" == "klrtnp" ]; then
+            cd ./tenants/klrt/np/terraform 
+          elif [ "${{ github.event.inputs.environment }}" == "etnapr" ]; then
+            cd ./tenants/etna/pr/terraform   
+          elif [ "${{ github.event.inputs.environment }}" == "knoxpr" ]; then
+            cd ./tenants/knox/pr/terraform
+          elif [ "${{ github.event.inputs.environment }}" == "fwksnp" ]; then
+            cd ./tenants/fwks/np/terraform
+          elif [ "${{ github.event.inputs.environment }}" == "demostage" ]; then
+            cd ./tenants/demostore/terraform    
+          fi
+          terraform init
+          terraform apply -auto-approve
+
+      - name: kubernetes pods apply
+        if: ${{inputs.pods_restart_all == true}} 
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "knoxqa" ]; then
+            cd ./tenants/knox/qa/deploy/app/pods
+          elif [ "${{ github.event.inputs.environment }}" == "etnaqa" ]; then
+            cd ./tenants/etna/qa/deploy/app/pods
+           elif [ "${{ github.event.inputs.environment }}" == "klrtnp" ]; then
+            cd ./tenants/klrt/np/deploy/app/pods    
+           elif [ "${{ github.event.inputs.environment }}" == "etnapr" ]; then
+            cd ./tenants/etna/pr/deploy/app/pods       
+           elif [ "${{ github.event.inputs.environment }}" == "knoxpr" ]; then
+            cd ./tenants/knox/pr/deploy/app/pods
+           elif [ "${{ github.event.inputs.environment }}" == "fwksnp" ]; then
+            cd ./tenants/fwks/np/deploy/app/pods
+           elif [ "${{ github.event.inputs.environment }}" == "demostage" ]; then
+            cd ./tenants/demostore/deploy/app/pods        
+          fi
+          kubectl apply -f .
+
+      - name: Restart Deployments
+        run: |
+            RESTART_ALL=${{ github.event.inputs.restart_all }}
+
+            if [ "$RESTART_ALL" == "true" ]; then
+                echo "Restarting all deployments in namespace znode except znode10xrabbitmq"
+                for deployment in $(kubectl get deployments -n znode -o name | grep -v "znode10xrabbitmq"); do
+                if kubectl get "$deployment" -n znode &>/dev/null; then
+                    echo "Restarting $deployment"
+                    kubectl rollout restart "$deployment" -n znode
+                else
+                    echo "$deployment not found, skipping."
+                fi
+                done
+            elif [ -n "$DEPLOYMENT" ]; then
+                if kubectl get deployment "$DEPLOYMENT" -n znode &>/dev/null; then
+                echo "Restarting $DEPLOYMENT"
+                kubectl rollout restart "$DEPLOYMENT" -n znode
+                else
+                echo "Deployment $DEPLOYMENT not found in namespace znode."
+                fi
+            else
+                echo "No deployment specified and 'Restart all' option is disabled."
+            fi
+
+      # - name: Deployment Status
+      #   uses: Co-qn/google-chat-notification@releases/v1
+      #   with:
+      #     name: Z10 ${{ github.event.inputs.environment }} Deployment
+      #     url: ${{ secrets.DEPLOYMENT_ALERTS }}
+      #     status: ${{ job.status }}
+      #   if: always()

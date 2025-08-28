@@ -1,0 +1,48 @@
+global:
+  timezone: Asia/Kolkata  
+
+multiwebIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret
+    services:
+    - store1
+    - store2
+    - store3
+    - store4
+    - store5
+  rules:
+  - name: store1
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: store2
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: store3
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: store4
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: store5
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  znode10xutility:
+    configmap: 
+      DB_NAME: "z10_wbst_dev9"

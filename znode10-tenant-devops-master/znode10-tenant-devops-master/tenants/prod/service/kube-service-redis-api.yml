@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+     kompose.cmd: C:\ProgramData\chocolatey\lib\kubernetes-kompose\tools\kompose.exe convert -f docker-compose-resolved.yml -o kube-compose.yml
+     kompose.version: 1.28.0 (c4137012e)
+  creationTimestamp: null
+  labels:
+    service: znode10xapiredis
+  name: znode10xapiredis
+spec:
+  ports:
+    - name: "6380"
+      port: 6380
+      targetPort: 6380
+    - name: "8002"
+      port: 8002
+      targetPort: 8002 
+  type: LoadBalancer
+  selector:
+    app: znode10xapiredis 
+status:
+  loadBalancer: {}

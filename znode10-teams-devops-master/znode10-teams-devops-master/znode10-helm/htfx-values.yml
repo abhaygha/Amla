@@ -1,0 +1,22 @@
+global:
+
+multiwebIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret
+    services:
+    - webstore-safetygearz10-stage
+    - webstore-stage-hotfixes-preview
+  rules:
+  - name: webstore-safetygearz10-stage
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: webstore-stage-hotfixes-preview
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix

@@ -1,0 +1,50 @@
+global:
+
+resources:
+  znode10xapi:
+    configmap:
+      appsettings__IsSeparatedQuantityByLineItem: "true"
+      appsettings__WebhookRequestTimeoutInSeconds: "30"
+      
+  znode10xapiv2:
+    configmap:
+      appsettings__WebhookRequestTimeoutInSeconds: "30"
+      
+      
+multiwebIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret
+    services:
+    - webstore-preview-infusion
+    - webstore-infusion
+    - webstore-preview-uts
+    - webstore-uts
+  rules:
+  - name: webstore-preview-infusion
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: webstore-infusion
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: webstore-preview-uts
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+  - name: webstore-uts
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+
+

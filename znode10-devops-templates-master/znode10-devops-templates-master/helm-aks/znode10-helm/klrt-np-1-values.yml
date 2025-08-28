@@ -1,0 +1,202 @@
+global:
+
+multiwebIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret
+    services:
+    - webstore-towelsbydoctorjoe
+    - webstore-catpumpsandparts
+    - webstore-preview-catpumpsandparts
+
+    - webstore-preview-towelsbydoctorjoe
+    - webstore-automation1
+    - webstore-preview-automation1
+    - webstore-automation2
+    - webstore-preview-automation2
+    - webstore-highpressurepumpsandparts
+    - webstore-preview-highpressurepumpsandparts
+    - webstore-kleenritedilutions
+    - webstore-preview-kleenritedilutions
+    - webstore-coinvacandairmachines
+    - webstore-preview-coinvacandairmachines
+    - webstore-detailsupplier
+    - webstore-preview-detailsupplier
+    - webstore-carwashpumps
+    - webstore-preview-carwashpumps
+    - webstore-pressurewashersupplier
+    - webstore-preview-pressurewashersupplier
+    - webstore-flojetpumpsandparts
+    - webstore-preview-flojetpumpsandparts
+    - webstore-expresswashwarehouse
+    - webstore-preview-expresswashwarehouse
+  rules:
+  - name: webstore-towelsbydoctorjoe
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-catpumpsandparts
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+
+  - name: webstore-preview-catpumpsandparts
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-preview-towelsbydoctorjoe
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-automation1
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-preview-automation1
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-automation2
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-preview-automation2
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+
+  - name: webstore-highpressurepumpsandparts
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-preview-highpressurepumpsandparts
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-kleenritedilutions
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-preview-kleenritedilutions
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-coinvacandairmachines
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-preview-coinvacandairmachines
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-detailsupplier
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-preview-detailsupplier
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-carwashpumps
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-preview-carwashpumps
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-pressurewashersupplier
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-preview-pressurewashersupplier
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-flojetpumpsandparts
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-preview-flojetpumpsandparts
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-expresswashwarehouse
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+  - name: webstore-preview-expresswashwarehouse
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix

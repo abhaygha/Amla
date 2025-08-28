@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+data:
+  redis.conf: |
+
+  
+    bind 0.0.0.0           # Allow Redis to listen on all network interfaces
+    protected-mode no      # Disable protected mode for easier connectivity
+    daemonize yes          # Run Redis in the background as a daemon
+
+    # Network
+    port 6379              # Default Redis port
+    tcp-backlog 511        # TCP backlog setting for incoming connections
+    timeout 0              # Disable timeout for socket connections
+    tcp-keepalive 300      # TCP keepalive time in seconds
+
+    # Persistence
+    appendonly yes         # Enable append-only mode for data persistence
+    appendfilename "appendonly.aof"  # Name of the append-only file
+    appendfsync everysec   # Flush append-only file every second for better durability
+
+    # Performance tuning
+    maxmemory-policy volatile-lru  # Evict using approximated LRU among the keys with an expire set
+    maxmemory-samples 10   # Number of samples of expired keys per eviction cycle
+    activerehashing yes    # Enable active rehashing to redistribute data among Redis nodes
+
+    # Disable unnecessary features
+    save ""                # Disable periodic snapshots (not recommended for production)
+    rdbcompression no      # Disable RDB compression for better performance
+
+    # Advanced
+    hash-max-ziplist-entries 512   # Use optimized data structures for Hashes
+    hash-max-ziplist-value 64      # Use optimized data structures for Hashes
+    list-max-ziplist-size -2       # Use optimized data structures for Lists
+    set-max-intset-entries 512     # Use optimized data structures for Sets
+    zset-max-ziplist-entries 128   # Use optimized data structures for Sorted Sets
+    zset-max-ziplist-value 64      # Use optimized data structures for Sorted Sets
+
+    # Logging
+    loglevel notice        # Set log level to notice for moderate logging
+
+    # Client output buffering
+    client-output-buffer-limit normal 0 0 0   # Unlimited normal clients
+    client-output-buffer-limit slave 256mb 64mb 60  # Buffer limit for replication slaves
+    client-output-buffer-limit pubsub 32mb 8mb 60   # Buffer limit for clients subscribing to pubsub
+
+    # Other optimizations
+    hz 10                  # Execute a background task every 10 milliseconds
+    dynamic-hz yes         # Adjust Redis server's frequency based on load
+    aof-rewrite-incremental-fsync yes   # Incremental fsync for AOF rewrites
+    rdb-save-incremental-fsync yes      # Incremental fsync for RDB saves
+
+    # Security (adjust according to your environment)
+    requirepass <your_password_here>   # Set a strong password for Redis access
+
+    # Advanced tuning (only if necessary)
+    no-appendfsync-on-rewrite no   # Disable appendfsync when rewriting the AOF file
+    aof-load-truncated yes         # Load AOF file even if it's truncated (not recommended for data integrity)
+
+    # Disable slow log (only for production)
+    slowlog-log-slower-than 10000   # Log queries that take longer than 10 seconds
+    slowlog-max-len 128             # Keep up to 128 slow log entries
+
+    # Monitoring (adjust according to your needs)
+    latency-monitor-threshold 0     # Disable latency monitoring
+
+    # Notifications (adjust according to your needs)
+    notify-keyspace-events ""       # Notify about none of the events by default
