@@ -29,10 +29,20 @@ on:
         required: false
         default: false
         type: boolean
+      skip_security_scan:
+        description: Skip security scanning (not recommended)
+        required: false
+        default: false
+        type: boolean
+      security_gate_enabled:
+        description: Enable security gate (block deployment on critical issues)
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   trigger-build-deploy:
-    uses: ./.github/workflows/build-deploy.yaml
+    uses: ./.github/workflows/build-deploy-secure.yaml
     with:
       tenant: ${{ inputs.tenant }}
       environment: ${{ inputs.environment }}
@@ -41,4 +51,6 @@ jobs:
       services: ${{ inputs.services }}
       all: ${{ inputs.all }}
       triggered_by: ${{ github.actor }}
+      skip_security_scan: ${{ inputs.skip_security_scan }}
+      security_gate_enabled: ${{ inputs.security_gate_enabled }}
     secrets: inherit
