@@ -29,7 +29,7 @@ on:
 
 jobs:
   parse_services:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
       services_list: ${{ steps.set.outputs.services_list }}
@@ -107,7 +107,7 @@ jobs:
 
   qa-acr-sync:
     name: QA ACR Sync with NP ACR
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: build_services_qa
     if: ${{ inputs.environment == 'qa' }}
     steps:
