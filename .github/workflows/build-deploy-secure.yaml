@@ -48,39 +48,49 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install jq
+        shell: pwsh
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
+          if ($env:RUNNER_OS -eq "Windows") {
             # Windows - jq should be pre-installed or use chocolatey
-            echo "Running on Windows, checking jq availability"
-          else
+            Write-Host "Running on Windows, checking jq availability"
+            try {
+              $jqVersion = jq --version
+              Write-Host "jq is available: $jqVersion"
+            } catch {
+              Write-Host "jq not found, installing via chocolatey..."
+              choco install jq -y
+            }
+          } else {
             # Linux - install jq
             sudo apt-get install -y jq
-          fi
+          }
 
       - name: Generate Matrix
         id: set
+        shell: pwsh
         run: |
-          ALL='${{ inputs.all }}'
-          INPUT_SERVICES='${{ inputs.services }}'
-          SELECTED=$(echo "$INPUT_SERVICES" | jq -r 'to_entries[] | select(.value == true) | .key' | tr '\n' ',')
-          KEYS=$(jq -n --arg selected "$SELECTED" '$selected | split(",")')
-          CONFIG=$(cat .github/services-config.json)
+          $ALL = '${{ inputs.all }}'
+          $INPUT_SERVICES = '${{ inputs.services }}'
+          $SELECTED = $INPUT_SERVICES | ConvertFrom-Json | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -ne "all" } | ForEach-Object { $_.Name } | Where-Object { ($INPUT_SERVICES | ConvertFrom-Json).$_ -eq $true } | Join-String -Separator ","
+          
+          if ($ALL -eq "true") {
+            $CONFIG = Get-Content ".github/services-config.json" | ConvertFrom-Json
+            $FINAL = $CONFIG
+          } else {
+            $CONFIG = Get-Content ".github/services-config.json" | ConvertFrom-Json
+            $KEYS = $SELECTED -split ","
+            $FINAL = $CONFIG | Where-Object { $KEYS -contains $_.service }
+          }
 
-          if [[ "$ALL" == "true" ]]; then
-            FINAL="$CONFIG"
-          else
-            FINAL=$(echo "$CONFIG" | jq --argjson keys "$KEYS" '[.[] | select(.service as $s | $keys | index($s))]')
-          fi
-
-          COUNT=$(echo "$FINAL" | jq 'length')
-          if [[ "$COUNT" -eq 0 ]]; then
-            echo "❌ No services selected or matched. Skipping build."
-            echo "matrix=[]" >> $GITHUB_OUTPUT
-          else
-            echo "✅ Found $COUNT services to build"
-            echo "matrix=$(echo "$FINAL" | jq -c)" >> $GITHUB_OUTPUT
-            echo "services_list=$SELECTED" >> $GITHUB_OUTPUT
-          fi
+          $COUNT = $FINAL.Count
+          if ($COUNT -eq 0) {
+            Write-Host "❌ No services selected or matched. Skipping build."
+            "matrix=[]" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else {
+            Write-Host "✅ Found $COUNT services to build"
+            "matrix=$($FINAL | ConvertTo-Json -Compress)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "services_list=$SELECTED" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
 
   # Security Scanning Phase
   security_scanning:
