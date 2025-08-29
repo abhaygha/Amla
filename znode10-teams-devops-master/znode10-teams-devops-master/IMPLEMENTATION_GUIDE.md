@@ -295,4 +295,4 @@ echo "Project: ${{ inputs.tenant }}-${{ inputs.service }}-${{ inputs.environment
 ---
 
 **Remember**: Security is a journey, not a destination. Start with this implementation and continuously improve based on your team's needs and feedback!
-
+## Used best open-source tool
