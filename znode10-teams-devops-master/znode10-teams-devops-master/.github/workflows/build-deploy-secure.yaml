@@ -48,7 +48,14 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install jq
-        run: sudo apt-get install -y jq
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # Windows - jq should be pre-installed or use chocolatey
+            echo "Running on Windows, checking jq availability"
+          else
+            # Linux - install jq
+            sudo apt-get install -y jq
+          fi
 
       - name: Generate Matrix
         id: set
