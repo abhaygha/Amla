@@ -1,3 +1,4 @@
+
 name: Build and Deploy Services with Security Scanning
 
 on:
@@ -31,6 +32,48 @@ on:
         type: boolean
         default: false
       security_gate_enabled:
+        required: false
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: "Tenant name"
+        required: true
+        type: string
+      environment:
+        description: "Target environment"
+        required: true
+        type: string
+      branch:
+        description: "Git branch to deploy"
+        required: true
+        type: string
+      all:
+        description: "Deploy all services"
+        required: false
+        type: boolean
+        default: false
+      services:
+        description: "Services to deploy (JSON string)"
+        required: true
+        type: string
+      namespace:
+        description: "Kubernetes namespace"
+        required: true
+        type: string
+        default: znode
+      triggered_by:
+        description: "Triggered by"
+        required: false
+        type: string
+      skip_security_scan:
+        description: "Skip security scanning"
+        required: false
+        type: boolean
+        default: false
+      security_gate_enabled:
+        description: "Enable security gate"
         required: false
         type: boolean
         default: true
