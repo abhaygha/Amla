@@ -40,7 +40,7 @@ on:
 
 jobs:
   security-scanning:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     environment: ${{ inputs.environment }}
     if: ${{ !inputs.skip_security_scan }}
     

@@ -163,7 +163,7 @@ jobs:
     strategy:
       matrix:
         include: ${{ fromJson(needs.parse_services.outputs.matrix) }}
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     environment: ${{ inputs.environment }}
     steps:
       - name: Post-Deployment Security Check
@@ -191,7 +191,7 @@ jobs:
   security_summary:
     if: ${{ !inputs.skip_security_scan }}
     needs: [parse_services, security_scanning, post_deployment_security]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Generate Security Summary
         run: |
@@ -227,7 +227,7 @@ jobs:
   security_gate_failure:
     if: ${{ inputs.security_gate_enabled && failure() }}
     needs: [parse_services, security_scanning]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Security Gate Failure Notification
         run: |
