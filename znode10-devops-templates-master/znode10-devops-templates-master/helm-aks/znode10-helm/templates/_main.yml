@@ -1,7 +1,0 @@
-{{- range $name, $svc := .Values.resources }}
-{{- $_ := set $svc "name" $name }}
-{{ include "znode10.microservice.deployment" (dict "Values" $.Values "Release" $.Release "name" $name "replicaCount" $svc.replicaCount "image" $svc.image "resources" $svc.resources) }}
----
-{{ include "znode10.microservice.service" (dict "name" $name "port" (include "znode10.port" (dict "name" $name)) ) }}
----
-{{- end }}

@@ -1,6 +1,0 @@
-global:
-
-resources:
-  znode10xwebstore:
-    configmap:
-      NEXT_PUBLIC_ENABLE_USER_ACTIVITY: "true"
