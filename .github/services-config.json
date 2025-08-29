@@ -1,0 +1,152 @@
+[
+  {
+    "service": "wbst",
+    "repository": "MRRSoft/znode10-webstore",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "pgbld",
+    "repository": "MRRSoft/znode10-pagebuilder",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "admin",
+    "repository": "MRRSoft/znode10-admin",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "api",
+    "repository": "MRRSoft/znode10-api",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "gateway",
+    "repository": "MRRSoft/znode10-apigateway",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "customtable",
+    "repository": "MRRSoft/znode10-customtable",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "v2",
+    "repository": "MRRSoft/znode10-api-v2",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "a-commerce",
+    "repository": "MRRSoft/znode10-commerce",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "portal",
+    "repository": "MRRSoft/znode10-portal",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "cstm",
+    "repository": "MRRSoft/znode10-custom-api",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "paymngr",
+    "repository": "MRRSoft/znode10-payment-manager",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "spreedly",
+    "repository": "MRRSoft/znode10-spreedly-plugin",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "braintree",
+    "repository": "MRRSoft/znode10-braintree-plugin",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "reports",
+    "repository": "MRRSoft/znode10-reports",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "shipping",
+    "repository": "MRRSoft/znode10-shipping-manager",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "fedex",
+    "repository": "MRRSoft/znode10-fedex-plugin",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "ups",
+    "repository": "MRRSoft/znode10-ups-plugin",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "azfunction",
+    "repository": "MRRSoft/znode10-azure-functions",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "graphqlapi",
+    "repository": "MRRSoft/znode10-graphql-api",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "taxmanager",
+    "repository": "MRRSoft/znode10-tax-manager",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "avatax",
+    "repository": "MRRSoft/znode10-avatax-plugin",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "diagno",
+    "repository": "MRRSoft/znode10-diagnostic",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "python",
+    "repository": "MRRSoft/znode10-utility",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "cc-api",
+    "repository": "MRRSoft/znode10-commerce-connector-api",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  },
+  {
+    "service": "cc-admin",
+    "repository": "MRRSoft/znode10-commerce-connector-admin",
+    "working_directory": "./",
+    "compose_file": "docker-compose.yml"
+  }
+]

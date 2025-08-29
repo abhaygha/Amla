@@ -1,0 +1,180 @@
+name: Build and Deploy QA-LT Databases
+
+on:
+ workflow_dispatch:
+    inputs:
+        environment:
+          description: 'The Environment to deploy on'
+          required: true
+          type: string
+          default: dev
+
+        branch:
+          description: 'The branch to deploy from'
+          required: true
+          type: string
+          default: dev
+
+        multifront_db:
+          description: 'Build Multifront DB'
+          required: true
+          default: false
+          type: boolean
+
+
+        hangfire_db:
+          description: 'Build Hangfire DB'
+          required: true
+          default: false
+          type: boolean
+  
+        recommendation_db:
+          description: 'Build Recommendation DB'
+          required: true
+          default: false
+          type: boolean
+
+        payment_manager_db:
+          description: 'Build Pymt Mngr DB'
+          required: true
+          default: false
+          type: boolean
+
+        # notify:
+        #   description: 'Deployment Status Notifications on GoogleChat'
+        #   required: false
+        #   default: false
+        #   type: boolean          
+
+jobs:
+  build_deploy_multifront_db:
+
+    runs-on: windows-2022
+    environment: ${{ github.event.inputs.environment }}
+    if: github.event.inputs.multifront_db == 'true'
+
+    steps:
+
+     - name: checkout multifront db repo
+       uses: actions/checkout@v4
+       with: 
+         repository: MRRSoft/znode10-multifront-db
+         token: ${{ secrets.ACCESS_REPO }}
+         ref: ${{ github.event.inputs.branch }}
+         path: ${{ github.workspace }}\znode10-multifront-db
+
+     - name: create dacpac
+       run: |
+           & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe' /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0  ${{ github.workspace }}/znode10-multifront-db/Znode_Multifront/Znode_Multifront_Database.sln /t:Clean,Build
+           dir ${{ github.workspace }}\znode10-multifront-db\Znode_Multifront\Znode_Multifront_Database\bin\Debug\
+
+     - uses: azure/login@v1
+       with:
+         creds: ${{ secrets.AZURE_CREDENTIALS_PROD_SID }}
+   
+     - name: Azure SQL Deploy
+       uses: Azure/sql-action@v1
+       with:
+          server-name: ${{ secrets.DB_SERVER_NAME }} 
+          connection-string: '${{ secrets.DB_WBST }}'
+          dacpac-package: ${{ github.workspace }}\znode10-multifront-db\Znode_Multifront\Znode_Multifront_Database\bin\Debug\Znode_Multifront_Database.dacpac
+          arguments: '/p:BlockOnPossibleDataLoss=false /p:DropObjectsNotInSource=false'
+
+
+  ##########################################################################################
+  build_deploy_hangfire_db:
+    runs-on: windows-2022
+    environment: ${{ github.event.inputs.environment }}
+    if: github.event.inputs.hangfire_db == 'true'  
+
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        repository: MRRSoft/znode10-hangfire-db
+        token: ${{ secrets.ACCESS_REPO }}
+        ref: ${{ github.event.inputs.branch }}
+
+
+    - name: create dacpac
+      run: |
+        & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe' /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0  Znode_Multifront_Hangfire/Znode_Multifront_Hangfire_Database.sln /t:Clean,Build
+        dir ${{ github.workspace }}\Znode_Multifront_Hangfire\Znode_Multifront_Hangfire_Database\bin\Debug\
+
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS_PROD_SID }}
+
+    - name: Azure SQL Deploy
+      uses: Azure/sql-action@v1
+      with:
+        server-name: ${{ secrets.DB_SERVER_NAME }}
+        connection-string: '${{ secrets.DB_HGFR }}'
+        dacpac-package: ${{ github.workspace }}\Znode_Multifront_Hangfire\Znode_Multifront_Hangfire_Database\bin\Debug\Znode_Multifront_Hangfire_Database.dacpac
+        arguments: '/p:BlockOnPossibleDataLoss=false /p:DropObjectsNotInSource=false'
+
+##########################################################################################################################
+
+  build_deploy_recommendation_db:
+    runs-on: windows-2022
+    environment: ${{ github.event.inputs.environment }}
+    if: github.event.inputs.recommendation_db == 'true'  
+    
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        repository: MRRSoft/znode10-recommendation-engine-db
+        token: ${{ secrets.ACCESS_REPO }}
+        ref: ${{ github.event.inputs.branch }}
+   
+    - name: create dacpac
+      run: |
+          & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe' /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0  Znode_Multifront_RecommendationEngine/Znode_Multifront_RecommendationEngine_Database.sln /t:Clean,Build
+          dir ${{ github.workspace }}\Znode_Multifront_RecommendationEngine\Znode_Multifront_RecommendationEngine_Database\bin\Debug\
+
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS_PROD_SID }}
+  
+    - name: Azure SQL Deploy
+      uses: Azure/sql-action@v1
+      with:
+        server-name: ${{ secrets.DB_SERVER_NAME }}
+        connection-string: '${{ secrets.DB_RCEG }}'
+        dacpac-package: ${{ github.workspace }}\Znode_Multifront_RecommendationEngine\Znode_Multifront_RecommendationEngine_Database\bin\Debug\Znode_Multifront_RecommendationEngine_Database.dacpac
+        arguments: '/p:BlockOnPossibleDataLoss=false /p:DropObjectsNotInSource=false'
+
+##########################################################################################################################
+
+  build_deploy_payment_manager_db:
+    runs-on: windows-2022
+    environment: ${{ github.event.inputs.environment }}
+    if: github.event.inputs.payment_manager_db == 'true'  
+    
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        repository: MRRSoft/znode10-plugin-payment-db
+        token: ${{ secrets.ACCESS_REPO }}
+        ref: ${{ github.event.inputs.branch }}
+  
+    - name: create dacpac
+      run: |
+          & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe' /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0  Znode_Multifront_Plugin_Payment/Znode_Multifront_Plugin_Payment_Database.sln /t:Clean,Build
+          dir ${{ github.workspace }}\Znode_Multifront_Plugin_Payment\Znode_Multifront_Plugin_Payment\bin\Debug\Znode_Multifront_Plugin_Payment.dacpac
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS_PROD_SID }}
+
+    - name: Azure SQL Deploy
+      uses: Azure/sql-action@v1
+      with:
+        server-name: ${{ secrets.DB_SERVER_NAME }}
+        connection-string: '${{ secrets.DB_PYMT }}'
+        dacpac-package: ${{ github.workspace }}\Znode_Multifront_Plugin_Payment\Znode_Multifront_Plugin_Payment\bin\Debug\Znode_Multifront_Plugin_Payment.dacpac
+        arguments: '/p:BlockOnPossibleDataLoss=false /p:DropObjectsNotInSource=false'

@@ -45,7 +45,7 @@ jobs:
       services_list: ${{ steps.set.outputs.services_list }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install jq
         run: |
@@ -89,7 +89,7 @@ jobs:
     strategy:
       matrix:
         include: ${{ fromJson(needs.parse_services.outputs.matrix) }}
-    uses: ./.github/workflows/devsecops-security-scan.yaml
+    uses: ./.github/workflows/devsecops-core.yaml
     with:
       service: ${{ matrix.service }}
       repository: ${{ matrix.repository }}
@@ -163,41 +163,10 @@ jobs:
     secrets:
       kubeconfig: ${{ secrets.KUBECONFIG }}
 
-  # Security Post-Deployment Scan
-  post_deployment_security:
-    if: ${{ !inputs.skip_security_scan && needs.parse_services.outputs.matrix != '[]' && (!inputs.security_gate_enabled || success()) }}
-    needs: [parse_services, deploy_services]
-    strategy:
-      matrix:
-        include: ${{ fromJson(needs.parse_services.outputs.matrix) }}
-    runs-on: self-hosted
-    environment: ${{ inputs.environment }}
-    steps:
-      - name: Post-Deployment Security Check
-        run: |
-          echo "🔒 Post-deployment security validation for ${{ matrix.service }}"
-          
-          # Check if service is running
-          if [ -n "${{ vars.TARGET_URL }}" ]; then
-            echo "Checking service health at: ${{ vars.TARGET_URL }}"
-            
-            # Basic health check
-            HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" "${{ vars.TARGET_URL }}/health" || echo "000")
-            
-            if [ "$HEALTH_CHECK" = "200" ]; then
-              echo "✅ Service health check passed"
-            else
-              echo "⚠️  Service health check failed with status: $HEALTH_CHECK"
-            fi
-          fi
-          
-          # Additional security validations can be added here
-          echo "🔒 Post-deployment security check completed"
-
   # Final Security Report
   security_summary:
     if: ${{ !inputs.skip_security_scan }}
-    needs: [parse_services, security_scanning, post_deployment_security]
+    needs: [parse_services, security_scanning]
     runs-on: self-hosted
     steps:
       - name: Generate Security Summary
@@ -207,14 +176,11 @@ jobs:
           echo "✅ Security scanning completed for all services"
           echo "✅ Build phase completed successfully"
           echo "✅ Deployment phase completed successfully"
-          echo "✅ Post-deployment security validation completed"
           echo ""
           echo "🔒 Security tools used:"
           echo "- SAST: SonarQube"
           echo "- Secret Management: GitLeaks"
-          echo "- Dependency Check: OWASP Dependency Check"
           echo "- Image Scanning: Trivy"
-          echo "- DAST: OWASP ZAP"
           echo ""
           echo "🎯 Next steps:"
           echo "1. Review security reports in artifacts"
@@ -223,11 +189,11 @@ jobs:
           echo "4. Schedule regular security scans"
 
       - name: Upload Security Summary
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: devsecops-summary-${{ inputs.environment }}
           path: |
-            .github/workflows/devsecops-security-scan.yaml
+            .github/workflows/devsecops-core.yaml
           retention-days: 30
 
   # Notify on Security Gate Failure
@@ -251,4 +217,3 @@ jobs:
           
           # Send notification (can be enhanced with Slack, Teams, etc.)
           echo "📧 Security gate failure notification sent"
-

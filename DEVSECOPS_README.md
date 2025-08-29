@@ -1,325 +1,216 @@
-# DevSecOps Implementation for Znode10 Teams DevOps
+# DevSecOps Implementation Guide
 
 ## Overview
 
-This repository implements comprehensive DevSecOps practices using industry-standard open-source security tools. The implementation integrates security scanning into the CI/CD pipeline to ensure code quality, security, and compliance before deployment.
+This repository implements a comprehensive DevSecOps pipeline using GitHub Actions with Windows self-hosted runners. The pipeline integrates three core security tools:
 
-## 🚀 Security Tools Integrated
+1. **SAST (Static Application Security Testing)** - SonarQube
+2. **Secret Management** - GitLeaks
+3. **Image Scanning** - Trivy
 
-### 1. **SAST (Static Application Security Testing)**
-- **Tool**: SonarQube
-- **Purpose**: Code quality and security analysis
-- **Features**:
-  - Code smell detection
-  - Security vulnerability identification
-  - Code coverage analysis
-  - Duplicate code detection
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    DevSecOps Pipeline                      │
+├─────────────────────────────────────────────────────────────┤
+│ 1. Parse Services Configuration                           │
+│ 2. Security Scanning Phase                                │
+│    ├── SAST (SonarQube)                                  │
+│    ├── Secret Management (GitLeaks)                      │
+│    └── Image Scanning (Trivy)                            │
+│ 3. Security Gate Check                                    │
+│ 4. Build Services (if security passes)                    │
+│ 5. Deploy Services (if security passes)                   │
+│ 6. Security Summary Report                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 🔧 Tools Used
+
+### 1. SAST - SonarQube
+- **Purpose**: Static code analysis for .NET applications
+- **Features**: 
+  - Code quality analysis
+  - Security vulnerability detection
+  - Code smell identification
   - Technical debt tracking
+- **Integration**: Uses `dotnet-sonarscanner` for .NET projects
 
-### 2. **Secret Management**
-- **Tool**: GitLeaks
+### 2. Secret Management - GitLeaks
 - **Purpose**: Detect hardcoded secrets and credentials
 - **Features**:
-  - Azure Storage Account Keys
-  - Database connection strings
-  - API keys and tokens
-  - JWT secrets
-  - Custom regex patterns
+  - Scans repository for API keys, passwords, tokens
+  - Supports multiple secret formats
+  - JSON report generation
+  - Configurable rules
+- **Integration**: Downloads and runs GitLeaks for Windows
 
-### 3. **Image Scanning**
-- **Tool**: Trivy
-- **Purpose**: Container image vulnerability scanning
+### 3. Image Scanning - Trivy
+- **Purpose**: Container image and Dockerfile vulnerability scanning
 - **Features**:
-  - Dockerfile security analysis
-  - Container image scanning
   - OS package vulnerability detection
-  - Configuration file analysis
+  - Language-specific dependency scanning
+  - Dockerfile misconfiguration detection
+  - JSON report generation
+- **Integration**: Downloads and runs Trivy for Windows
 
-### 4. **Dependency Check**
-- **Tool**: OWASP Dependency Check
-- **Purpose**: Third-party dependency vulnerability scanning
-- **Features**:
-  - .NET NuGet package analysis
-  - CVE database integration
-  - Severity-based reporting
-  - False positive suppression
+## 📁 File Structure
 
-### 5. **DAST (Dynamic Application Security Testing)**
-- **Tool**: OWASP ZAP
-- **Purpose**: Runtime application security testing
-- **Features**:
-  - Spider crawling
-  - Active vulnerability scanning
-  - API security testing
-  - Web application security assessment
-
-## 🔧 Workflow Structure
-
-### Main Security Workflow
-- **File**: `.github/workflows/devsecops-security-scan.yaml`
-- **Purpose**: Comprehensive security scanning for individual services
-- **Triggers**: Called by build-deploy workflows
-
-### Enhanced Build-Deploy Workflow
-- **File**: `.github/workflows/build-deploy-secure.yaml`
-- **Purpose**: Orchestrates security scanning, building, and deployment
-- **Features**: Security gate enforcement
-
-### Service-Specific Workflows
-- **Files**: `dev1_build_deploy_secure.yml`, etc.
-- **Purpose**: Trigger secure deployments for specific environments
-
-## 📋 Prerequisites
-
-### Required Secrets
-```yaml
-# GitHub Repository Secrets
-ACCESS_REPO: Personal access token for cross-repo access
-SONAR_TOKEN: SonarQube authentication token
-TRIVY_USERNAME: Trivy registry username (optional)
-TRIVY_PASSWORD: Trivy registry password (optional)
-KUBECONFIG: Kubernetes configuration for deployment
+```
+.github/
+├── workflows/
+│   ├── devsecops-core.yaml           # Core security scanning workflow
+│   ├── build-deploy-secure.yaml      # Main orchestration workflow
+│   ├── build-service.yaml            # Service building workflow
+│   ├── deploy-service.yaml           # Service deployment workflow
+│   └── dev1_build_deploy_secure.yml # Dev1 environment trigger
+├── services-config.json              # Services configuration
+└── README.md                         # This file
 ```
 
-### Required Variables
-```yaml
-# GitHub Repository Variables
-SONAR_HOST_URL: SonarQube server URL (default: https://sonarcloud.io)
-DEV_ACR_SERVER: Azure Container Registry for development
-QA_ACR_SERVER: Azure Container Registry for QA
-TARGET_URL: Target URL for DAST scanning
-```
+## 🚀 Getting Started
 
-## 🚀 Usage
+### Prerequisites
 
-### 1. Manual Security Scan
-```yaml
-# Trigger security scanning for a specific service
-name: Manual Security Scan
-on:
-  workflow_dispatch:
-    inputs:
-      service: "api"
-      environment: "dev1"
-      tenant: "z10"
-      skip_security_scan: false
-```
+1. **Windows Self-Hosted Runner**
+   - Must be configured and running
+   - Should have .NET 8.0 SDK installed
+   - Should have Docker Desktop installed
+   - Should have kubectl configured
 
-### 2. Secure Deployment
-```yaml
-# Deploy with security scanning enabled
-name: Secure Deployment
-on:
-  workflow_dispatch:
-    inputs:
-      environment: "dev1"
-      services: '{"api": true, "admin": true}'
-      security_gate_enabled: true
-      skip_security_scan: false
-```
+2. **GitHub Secrets**
+   - `ACCESS_REPO`: GitHub Personal Access Token
+   - `SONAR_TOKEN`: SonarQube authentication token
+   - `TRIVY_USERNAME`: Trivy registry username
+   - `TRIVY_PASSWORD`: Trivy registry password
+   - `KUBECONFIG`: Kubernetes configuration
+   - `DEV_ACRUN`: Development ACR username
+   - `DEV_ACRPW`: Development ACR password
+   - `QA_ACRUN`: QA ACR username
+   - `QA_ACRPW`: QA ACR password
 
-### 3. Skip Security Scanning (Not Recommended)
-```yaml
-# Only for emergency deployments
-name: Emergency Deployment
-on:
-  workflow_dispatch:
-    inputs:
-      environment: "prod"
-      services: '{"api": true}'
-      skip_security_scan: true
-      security_gate_enabled: false
-```
+3. **GitHub Variables**
+   - `DEV_ACR_SERVER`: Development ACR server URL
+   - `QA_ACR_SERVER`: QA ACR server URL
+   - `IMAGE_REGISTRY`: Container registry URL
+
+### Running the Pipeline
+
+1. **Manual Trigger**
+   - Go to Actions tab in GitHub
+   - Select "Trigger - Z10 DEV1 with DevSecOps"
+   - Click "Run workflow"
+   - Fill in the required parameters
+
+2. **Parameters**
+   - `tenant`: Tenant name (default: z10)
+   - `environment`: Target environment (default: dev1)
+   - `branch`: Git branch to deploy (default: int)
+   - `namespace`: Kubernetes namespace (default: znode)
+   - `services`: JSON object of services to deploy
+   - `all`: Deploy all services (default: false)
+   - `skip_security_scan`: Skip security scanning (default: false)
+   - `security_gate_enabled`: Enable security gate (default: true)
 
 ## 🔒 Security Gates
 
-### Critical Vulnerabilities
-- **Blocking**: Critical CVSS 9.0+ vulnerabilities
-- **Action**: Deployment blocked until resolved
-- **Override**: Requires manual approval
+The pipeline implements security gates that can block deployment if:
 
-### High Vulnerabilities
-- **Warning**: CVSS 7.0-8.9 vulnerabilities
-- **Action**: Warning displayed, deployment continues
-- **Threshold**: More than 5 high vulnerabilities triggers warning
+1. **SAST Analysis Fails**: Critical code quality or security issues
+2. **Secrets Detected**: Hardcoded credentials or API keys found
+3. **Vulnerabilities Found**: Critical or high-severity vulnerabilities in Dockerfiles
 
-### Medium/Low Vulnerabilities
-- **Reporting**: CVSS 4.0-6.9 and 0.1-3.9 vulnerabilities
-- **Action**: Documented in reports
-- **Tracking**: Monitored for trends
+### Security Gate Configuration
+
+- **Enabled by default**: `security_gate_enabled: true`
+- **Can be disabled**: Set to `false` for testing
+- **Blocks deployment**: If any security tool fails
+- **Provides reports**: Detailed findings in workflow artifacts
 
 ## 📊 Reports and Artifacts
 
-### Generated Reports
-1. **Security Summary**: Markdown summary of all scans
-2. **SAST Reports**: SonarQube analysis results
-3. **Secret Scan**: GitLeaks findings in SARIF format
-4. **Dependency Reports**: OWASP Dependency Check results
-5. **Image Scan**: Trivy vulnerability reports
-6. **DAST Reports**: OWASP ZAP security assessment
+### Security Reports
+- **SAST Report**: SonarQube analysis results
+- **GitLeaks Report**: Secret detection findings
+- **Trivy Report**: Vulnerability scan results
+- **Security Summary**: Overall pipeline status
 
-### Report Formats
-- **HTML**: Human-readable reports
-- **JSON**: Machine-readable data
-- **SARIF**: GitHub Security tab integration
-- **Markdown**: Documentation and summaries
+### Artifact Retention
+- **Security Reports**: 30 days
+- **Build Artifacts**: 30 days
+- **Deployment Logs**: 30 days
 
-## 🛠️ Configuration Files
+## 🛠️ Customization
 
-### GitLeaks Configuration
-- **File**: `.gitleaks.toml`
-- **Purpose**: Configure secret detection patterns
-- **Customization**: Add/remove secret types
+### Adding New Services
+1. Update `.github/services-config.json`
+2. Add service configuration with:
+   - Repository URL
+   - Working directory
+   - Docker compose file
 
-### OWASP Dependency Check Suppression
-- **File**: `suppression.xml`
-- **Purpose**: Suppress false positives
-- **Usage**: Add known safe packages
+### Modifying Security Rules
+1. **SonarQube**: Configure quality gates in SonarQube server
+2. **GitLeaks**: Customize detection rules in workflow
+3. **Trivy**: Adjust severity thresholds for vulnerabilities
 
-### SonarQube Configuration
-- **File**: Project-specific configuration
-- **Purpose**: Customize code analysis rules
-- **Integration**: Via SonarQube dashboard
+### Environment-Specific Configuration
+- Different ACR servers for dev/qa/prod
+- Environment-specific Kubernetes namespaces
+- Custom security policies per environment
 
-## 🔄 Integration Points
-
-### CI/CD Pipeline
-1. **Code Checkout**: Repository cloning
-2. **Security Scanning**: SAST, secrets, dependencies
-3. **Image Building**: Docker container creation
-4. **Image Scanning**: Trivy vulnerability analysis
-5. **Deployment**: Kubernetes deployment
-6. **Post-Deployment**: DAST and health checks
-
-### GitHub Features
-- **Security Tab**: SARIF report integration
-- **Dependabot**: Automated dependency updates
-- **Code Scanning**: Automated security analysis
-- **Actions**: Workflow automation
-
-## 📈 Monitoring and Metrics
-
-### Security Metrics
-- **Vulnerability Count**: By severity and type
-- **Scan Coverage**: Percentage of code scanned
-- **Fix Rate**: Time to resolve security issues
-- **False Positive Rate**: Accuracy of scans
-
-### Dashboard Integration
-- **SonarQube**: Code quality metrics
-- **GitHub Security**: Vulnerability tracking
-- **Custom Dashboards**: Security KPIs
-
-## 🚨 Incident Response
-
-### Security Breach Response
-1. **Immediate**: Stop affected deployments
-2. **Assessment**: Analyze security scan results
-3. **Remediation**: Fix identified vulnerabilities
-4. **Verification**: Re-run security scans
-5. **Deployment**: Resume secure deployment
-
-### Escalation Matrix
-- **Critical**: Security team + DevOps lead
-- **High**: DevOps lead + Service owner
-- **Medium**: Service owner
-- **Low**: Automated tracking
-
-## 🔧 Troubleshooting
+## 🔍 Troubleshooting
 
 ### Common Issues
 
-#### SonarQube Connection Failed
-```bash
-# Check token validity
-curl -u $SONAR_TOKEN: https://sonarcloud.io/api/authentication/validate
+1. **Runner Not Available**
+   - Check runner status in GitHub
+   - Verify Windows service is running
+   - Check network connectivity
 
-# Verify project key format
-echo "Project key: ${{ inputs.tenant }}-${{ inputs.service }}-${{ inputs.environment }}"
-```
+2. **Security Tool Failures**
+   - Review tool-specific logs
+   - Check required secrets are configured
+   - Verify tool versions are compatible
 
-#### GitLeaks False Positives
-```bash
-# Update .gitleaks.toml with new patterns
-# Add to allowlist for known safe patterns
-# Use suppression for specific cases
-```
+3. **Build Failures**
+   - Check Docker Desktop is running
+   - Verify ACR credentials
+   - Check service configuration
 
-#### Dependency Check Failures
-```bash
-# Check suppression.xml for false positives
-# Update vulnerable packages
-# Verify CVE database connectivity
-```
-
-#### Trivy Image Build Failures
-```bash
-# Ensure Docker daemon is running
-# Check Dockerfile syntax
-# Verify base image accessibility
-```
-
-#### OWASP ZAP Timeout
-```bash
-# Increase scan timeout values
-# Reduce scan scope for large applications
-# Use targeted scanning instead of full crawl
-```
-
-## 📚 Best Practices
-
-### Security Scanning
-1. **Regular Scans**: Run security scans on every deployment
-2. **Baseline Establishment**: Set security thresholds
-3. **False Positive Management**: Regular review and updates
-4. **Tool Updates**: Keep security tools current
-
-### Code Quality
-1. **Automated Testing**: High test coverage
-2. **Code Reviews**: Security-focused reviews
-3. **Dependency Management**: Regular updates
-4. **Documentation**: Security requirements and procedures
-
-### Deployment Security
-1. **Least Privilege**: Minimal required permissions
-2. **Network Security**: Proper network segmentation
-3. **Secret Management**: Use secure secret stores
-4. **Monitoring**: Continuous security monitoring
+### Debug Mode
+- Set `skip_security_scan: true` to bypass security checks
+- Review workflow logs for detailed error information
+- Check artifact uploads for tool outputs
 
 ## 🔮 Future Enhancements
 
 ### Planned Features
-- **Container Signing**: Image integrity verification
-- **Policy as Code**: Security policy automation
-- **Compliance Reporting**: SOC2, PCI-DSS compliance
-- **Threat Modeling**: Automated threat analysis
-- **Security Training**: Developer security education
+1. **DAST Integration**: OWASP ZAP for runtime testing
+2. **Dependency Scanning**: OWASP Dependency Check for .NET
+3. **Compliance Reporting**: Generate compliance reports
+4. **Slack/Teams Integration**: Real-time notifications
+5. **Security Dashboard**: Centralized security metrics
 
-### Integration Roadmap
-- **Slack/Teams**: Security notification integration
-- **Jira**: Security issue tracking
-- **Grafana**: Security metrics dashboard
-- **ELK Stack**: Security log analysis
+### Advanced Security
+1. **Container Signing**: Sign and verify container images
+2. **Policy as Code**: Security policies in YAML
+3. **Automated Remediation**: Auto-fix common issues
+4. **Security Metrics**: Track security posture over time
 
 ## 📞 Support
 
-### Getting Help
-1. **Documentation**: Review this README
-2. **Issues**: Create GitHub issues
-3. **Security Team**: Contact security team
-4. **DevOps Team**: Contact DevOps team
+For issues or questions:
+1. Check workflow logs for detailed error information
+2. Review GitHub Actions documentation
+3. Contact the DevOps team
+4. Create an issue in this repository
 
-### Contributing
-1. **Security Improvements**: Submit pull requests
-2. **Tool Updates**: Suggest new security tools
-3. **Documentation**: Improve documentation
-4. **Testing**: Test security workflows
+## 📚 Additional Resources
 
----
-
-## 🏆 Security Champions
-
-This DevSecOps implementation is maintained by the DevOps and Security teams. For questions, suggestions, or improvements, please reach out to the team leads.
-
-**Remember**: Security is everyone's responsibility. Secure code starts with secure development practices!
-
+- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [SonarQube Documentation](https://docs.sonarqube.org/)
+- [GitLeaks Documentation](https://github.com/zricethezav/gitleaks)
+- [Trivy Documentation](https://aquasecurity.github.io/trivy/)
+- [DevSecOps Best Practices](https://owasp.org/www-project-devsecops-maturity-model/)

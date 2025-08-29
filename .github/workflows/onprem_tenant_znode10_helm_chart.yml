@@ -1,0 +1,200 @@
+name: Znode10 Tenant Onboarding on Local Cluster
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: 'Client/Tenant Name'
+        required: true
+      environment:
+        description: 'Environment Type'
+        required: true
+        default: 'npr'
+      namespace:
+        description: 'Namespace'
+        required: true
+        default: 'znode'
+
+
+jobs:
+  deploy:
+    name: Deploy Znode10x Helm Chart
+    runs-on: [self-hosted, 100.195]
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+    - name: Checkout Template Repository
+      uses: actions/checkout@v2
+      with:
+        repository: MRRSoft/znode10-devops-templates
+        token: ${{ secrets.ACCESS_REPO }}
+        ref: master
+
+    - name: Kubernetes Set up
+      uses: azure/k8s-set-context@v1
+      with:
+        kubeconfig: ${{ secrets.KUBECONFIG }}
+        version: '1.19.9'
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: v3.13.2
+
+    - name: Create namespace if not exists
+      run: |
+        ns="${{ github.event.inputs.namespace }}"
+        if kubectl get ns "$ns" >/dev/null 2>&1; then
+          echo "namespace '$ns' already exists."
+        else
+          echo "Creating namespace '$ns'..."
+          kubectl create ns "$ns"
+        fi
+
+    - name: Setup Metal LB
+      if: ${{ vars.CLUSTER_TYPE == 'local' }}
+      run: |
+        kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/config/manifests/metallb-native.yaml
+
+    - name: Add storage class for local path
+      if: ${{ vars.CLUSTER_TYPE == 'local' }}
+      run: |
+        kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+        kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+    - name: Add Bitnami Helm Repository for Redis
+      working-directory: ./helm-aks/znode10-helm/redis
+      run: helm repo add bitnami https://charts.bitnami.com/bitnami
+
+    - name: Install or Upgrade Redis webstore using Helm
+      working-directory: ./helm-aks/znode10-helm/redis
+      run: |
+        helm repo update
+        set_affinity=""
+        if [ "${{ vars.CLUSTER_TYPE }}" = "aks" ]; then
+          set_affinity="--set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key=agentpool \
+            --set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator=In \
+            --set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].values[0]=znode10apl"
+        fi
+        helm upgrade --install rediswebstore bitnami/redis \
+          -f redis-helm-webstore.yml -n ${{ github.event.inputs.namespace}}
+    - name: Install or Upgrade Redis api using Helm
+      working-directory: ./helm-aks/znode10-helm/redis
+      run: |
+        helm repo update
+        set_affinity=""
+        if [ "${{ vars.CLUSTER_TYPE }}" = "aks" ]; then
+          set_affinity="--set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key=agentpool \
+            --set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator=In \
+            --set master.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].values[0]=znode10apl"
+        fi
+        helm upgrade --install redisapi bitnami/redis \
+          -f redis-helm-api.yml -n ${{ github.event.inputs.namespace}}
+    - name: Run Redis Client Pod for Rediswebstore in Background
+      working-directory: ./helm-aks/znode10-helm
+      run: |
+        kubectl run --namespace ${{ github.event.inputs.namespace }} rediswebstore-client --restart='Never' \
+          --image docker.io/bitnami/redis:7.4.0-debian-12-r2 --command -- sleep infinity
+    - name: Run Redis Client Pod for Redisapi in Background
+      working-directory: ./helm-aks/znode10-helm
+      run: |
+        kubectl run --namespace ${{ github.event.inputs.namespace }} redisapi-client --restart='Never' \
+          --image docker.io/bitnami/redis:7.4.0-debian-12-r2 --command -- sleep infinity
+    - name: Create Required Secrets
+      working-directory: ./helm-aks/znode10-helm/ssl/${{ vars.DOMAIN }}
+      run: |
+        kubectl create secret tls api-tls-secret --cert=${{ vars.DOMAIN }}.crt --key=${{ vars.DOMAIN }}.key -n ${{ github.event.inputs.namespace}}
+        kubectl create secret docker-registry prodacrsecret --namespace ${{ github.event.inputs.namespace }} --docker-server=${{ secrets.PROD_ACR_SERVER }} --docker-username=${{ secrets.ACRUNPROD }} --docker-password=${{ secrets.ACRPWPROD }}
+        kubectl create secret docker-registry nonprodacrsecret --namespace ${{ github.event.inputs.namespace }} --docker-server=${{ secrets.NP_ACR_SERVER }} --docker-username=${{ secrets.ACRUN_NP }} --docker-password=${{ secrets.ACRPW_NP }}
+        kubectl create secret docker-registry tenantacrsecret --namespace ${{ github.event.inputs.namespace }} --docker-server=${{ vars.TENANT_ACR_SERVER }} --docker-username=${{ secrets.TENANT_ACRUN }} --docker-password=${{ secrets.TENANT_ACRPW }}
+        kubectl create secret generic znode10storage --from-literal azurestorageaccountname=${{ secrets.STORAGE_NAME }} --from-literal azurestorageaccountkey=${{ secrets.STORAGE_KEY }} --type=Opaque -n ${{ github.event.inputs.namespace}}
+
+
+    - name: Helm Upgrade or Install DB Chart
+      working-directory: ./helm-aks/znode10-helm-db
+      run: |
+        helm upgrade --install znode10-helm-db . \
+          -f db-values.yml \
+          --namespace ${{ github.event.inputs.namespace }} \
+          --set global.clusterType=${{ vars.CLUSTER_TYPE }}
+          
+    - name: Helm Install ingress chart
+      run: |
+        helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+        helm repo update
+        helm upgrade --install nginx ingress-nginx/ingress-nginx \
+          --namespace ${{ github.event.inputs.namespace }} \
+          --set controller.ingressClassResource.name=nginx \
+          --set controller.ingressClassName=nginx \
+          --set controller.kind=DaemonSet \
+          --set controller.hostNetwork=true \
+          --set controller.daemonset.useHostPort=true \
+          --set controller.service.type=ClusterIP \
+          --set controller.admissionWebhooks.enabled=false
+      
+
+    - name: Checkout Teams Repo with Submodules
+      uses: actions/checkout@v4
+      with:
+        ref: master
+        submodules: recursive
+        token: ${{ secrets.ACCESS_REPO }}
+
+    - name: Update submodule to latest master
+      run: git submodule update --remote --checkout --recursive
+
+    - name: Kubernetes Set up
+      uses: azure/k8s-set-context@v1
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBECONFIG }}
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: v3.13.2
+
+    - name: Helm install znode10 chart
+      working-directory: ./znode10-helm/znode-templates/helm-aks/znode10-helm
+      run: |
+        echo "Deploying to environment: ${{ inputs.tenant }}${{ inputs.environment }}"
+        echo '${{ vars.IMAGE_TAGS }}' > image_tags.json
+        set_args=""
+        for service in $(jq -r 'keys[]' image_tags.json); do
+          tag=$(jq -r --arg svc "$service" '.[$svc]' image_tags.json)
+          if [[ -n "$tag" && "$tag" != "null" ]]; then
+            echo "✅ Using provided tag for $service: $tag"
+          else
+            current_image=$(kubectl get deployment $service -n ${{ inputs.namespace }} -o jsonpath='{.spec.template.spec.containers[0].image}' || true)
+            if [[ -n "$current_image" ]]; then
+              current_tag=$(echo "$current_image" | awk -F':' '{print $2}')
+              tag="$current_tag"
+            else
+              echo "❌ ERROR: Deployment for $service not found. Cannot continue."
+              exit 1
+            fi
+          fi
+          set_args="$set_args --set-string resources.$service.image.tag=$tag"
+        done
+
+          helm upgrade --install znode10x . \
+            --namespace ${{ inputs.namespace }} \
+            -f default-values.yml \
+            -f values.yml \
+            -f ../../../../znode10-helm/${{ inputs.environment }}-values.yml \
+            -f ingress-values.yml \
+            -f ${{ vars.CATEGORY }}-values.yml \
+            --set global.tenant=${{ inputs.tenant }} \
+            --set global.environment=${{ inputs.environment }} \
+            --set global.domain=${{ vars.URL }} \
+            --set global.webstoreURL=${{ vars.WEBSTORE_URL }} \
+            --set global.imageRegistry=${{ vars.ACR_SERVER }} \
+            --set global.imagePullSecrets=${{ vars.BLACKBOX }} \
+            --set global.tenantacr.imageRegistry=${{ vars.TENANT_ACR_SERVER }} \
+            --set global.ingressClassName=nginx \
+            $set_args
+  
+    - name: Apply ingress and restart
+      run: |
+        echo "Waiting 90 seconds to ensure ingress controller is ready..."
+        sleep 90
+        kubectl rollout restart daemonset nginx-ingress-nginx-controller -n ${{ github.event.inputs.namespace}}

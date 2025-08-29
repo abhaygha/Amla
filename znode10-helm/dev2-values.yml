@@ -1,0 +1,37 @@
+global:
+  timezone: Asia/Kolkata
+
+multiwebIngress:
+  enabled: true
+  tls:
+    secretName: api-tls-secret
+    services:
+    - webstoretest
+  rules:
+  - name: webstoretest
+    serviceName: znode10xwebstore
+    servicePort: 443
+    paths:
+    - path: /
+      pathType: Prefix
+
+resources:
+  znode10xadmin:
+    configmap:
+      appsettings__IsLocalEnvironment: "true"
+
+  znode10xapi:
+    configmap:
+      appsettings__IsLocalEnvironment: "true"
+
+  znode10xcustomtable:
+    configmap:
+      appsettings__IsLocalEnvironment: "true"
+
+  znode10xwebstore:
+    configmap:
+      REDIS_SENTINEL_ENABLED: "true"  
+
+  znode10xutility:
+    configmap: 
+      DB_NAME: "z10_wbst_dev2"

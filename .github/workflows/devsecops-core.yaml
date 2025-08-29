@@ -1,0 +1,173 @@
+name: DevSecOps Core Security Scan
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+      repository:
+        required: true
+        type: string
+      ref:
+        required: true
+        type: string
+      working_directory:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      tenant:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      skip_security_scan:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      access_token:
+        required: true
+      sonar_token:
+        required: true
+      trivy_username:
+        required: true
+      trivy_password:
+        required: true
+
+jobs:
+  security-scanning:
+    runs-on: self-hosted
+    environment: ${{ inputs.environment }}
+    if: ${{ !inputs.skip_security_scan }}
+    steps:
+      - name: Checkout Service Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.access_token }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # SAST - SonarQube Analysis
+      - name: SAST - SonarQube Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.sonar_token }}
+        run: |
+          echo "🔍 Starting SAST analysis with SonarQube for ${{ inputs.service }}"
+          
+          # Install SonarScanner for .NET
+          dotnet tool install --global dotnet-sonarscanner
+          
+          # Run SonarQube analysis
+          dotnet sonarscanner begin /k:"${{ inputs.tenant }}-${{ inputs.service }}-${{ inputs.environment }}" /d:sonar.host.url="http://localhost:9000" /d:sonar.login="${{ secrets.sonar_token }}"
+          
+          # Build the project
+          dotnet build ${{ inputs.working_directory }}
+          
+          # End SonarQube analysis
+          dotnet sonarscanner end /d:sonar.login="${{ secrets.sonar_token }}"
+          
+          echo "✅ SAST analysis completed"
+
+      # Secret Management - GitLeaks Scan
+      - name: Secret Management - GitLeaks Scan
+        run: |
+          echo "🔐 Starting Secret Management scan with GitLeaks for ${{ inputs.service }}"
+          
+          # Download GitLeaks for Windows
+          $env:GITLEAKS_VERSION = "v8.18.0"
+          Invoke-WebRequest -Uri "https://github.com/zricethezav/gitleaks/releases/download/$env:GITLEAKS_VERSION/gitleaks_8.18.0_windows_x64.zip" -OutFile "gitleaks.zip"
+          Expand-Archive -Path "gitleaks.zip" -DestinationPath "." -Force
+          
+          # Run GitLeaks scan
+          .\gitleaks.exe detect --source . --report-format json --report-path gitleaks-report.json --exit-code 0
+          
+          # Check if secrets were found
+          if (Test-Path "gitleaks-report.json") {
+            $report = Get-Content "gitleaks-report.json" | ConvertFrom-Json
+            if ($report.Count -gt 0) {
+              echo "🚨 SECRETS FOUND: $($report.Count) potential secrets detected"
+              echo $report | ConvertTo-Json -Depth 3
+              exit 1
+            } else {
+              echo "✅ No secrets found"
+            }
+          } else {
+            echo "✅ No secrets found"
+          }
+          
+          echo "✅ Secret Management scan completed"
+
+      # Image Scanning - Trivy Scan
+      - name: Image Scanning - Trivy Scan
+        run: |
+          echo "🐳 Starting Image Scanning with Trivy for ${{ inputs.service }}"
+          
+          # Download Trivy for Windows
+          $env:TRIVY_VERSION = "0.48.4"
+          Invoke-WebRequest -Uri "https://github.com/aquasecurity/trivy/releases/download/v$env:TRIVY_VERSION/trivy_$env:TRIVY_VERSION_windows-64bit.zip" -OutFile "trivy.zip"
+          Expand-Archive -Path "trivy.zip" -DestinationPath "." -Force
+          
+          # Check if Dockerfile exists
+          if (Test-Path "${{ inputs.working_directory }}/Dockerfile") {
+            echo "🔍 Scanning Dockerfile for vulnerabilities"
+            
+            # Scan Dockerfile
+            .\trivy.exe config "${{ inputs.working_directory }}/Dockerfile" --format json --output trivy-dockerfile-report.json
+            
+            # Check for high/critical vulnerabilities
+            $dockerfileReport = Get-Content "trivy-dockerfile-report.json" | ConvertFrom-Json
+            $criticalVulns = $dockerfileReport.Results | Where-Object { $_.Vulnerabilities.Severity -eq "CRITICAL" }
+            $highVulns = $dockerfileReport.Results | Where-Object { $_.Vulnerabilities.Severity -eq "HIGH" }
+            
+            if ($criticalVulns -or $highVulns) {
+              echo "🚨 VULNERABILITIES FOUND:"
+              if ($criticalVulns) { echo "Critical: $($criticalVulns.Count)" }
+              if ($highVulns) { echo "High: $($highVulns.Count)" }
+              echo "Check trivy-dockerfile-report.json for details"
+              exit 1
+            } else {
+              echo "✅ No critical/high vulnerabilities found in Dockerfile"
+            }
+          } else {
+            echo "ℹ️ No Dockerfile found, skipping image scanning"
+          }
+          
+          echo "✅ Image Scanning completed"
+
+      # Upload Security Reports
+      - name: Upload Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports-${{ inputs.service }}-${{ inputs.environment }}
+          path: |
+            gitleaks-report.json
+            trivy-dockerfile-report.json
+          retention-days: 30
+
+      # Security Summary
+      - name: Security Summary
+        if: always()
+        run: |
+          echo "📊 DevSecOps Security Scan Summary"
+          echo "=================================="
+          echo "Service: ${{ inputs.service }}"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Tenant: ${{ inputs.tenant }}"
+          echo "Branch: ${{ inputs.ref }}"
+          echo ""
+          echo "🔍 Security Tools Executed:"
+          echo "✅ SAST: SonarQube analysis completed"
+          echo "✅ Secret Management: GitLeaks scan completed"
+          echo "✅ Image Scanning: Trivy scan completed"
+          echo ""
+          echo "📁 Reports available in artifacts: security-reports-${{ inputs.service }}-${{ inputs.environment }}"

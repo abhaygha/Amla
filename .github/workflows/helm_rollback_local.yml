@@ -1,0 +1,67 @@
+
+name: Helm Rollback by Revision
+on:
+  workflow_dispatch:
+
+    inputs:
+      environment:
+        description: "Environment (dev1/dev2)"
+        required: true
+        default: "dev8"
+      namespace:
+        description: "Kubernetes namespace"
+        required: true
+        default: "znode"
+      current_revision:
+        description: "Current deployed Helm revision"
+        required: true
+      steps_back:
+        description: "How many revisions to go back (1 = previous)"
+        required: true
+        default: "1"
+
+jobs:
+  helm_rollback:
+    runs-on: [self-hosted, 100.195]
+    environment: ${{ github.event.inputs.environment }}
+
+    env:
+      REL: znode10x
+      NS: ${{ github.event.inputs.namespace }}
+
+    steps:
+      - name: Checkout Teams Repo
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          token: ${{ secrets.ACCESS_REPO }}
+
+      - name: Kubernetes Set up
+        uses: azure/k8s-set-context@v1
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Compute target revision
+        id: compute
+        run: |
+          FROM=${{ github.event.inputs.current_revision }}
+          BACK=${{ github.event.inputs.steps_back }}
+          TARGET=$((FROM - BACK))
+          if [[ "$TARGET" -lt 1 ]]; then
+            echo "❌ Invalid revision: cannot rollback to <$TARGET>"
+            exit 1
+          fi
+          echo "🎯 Rolling back from $FROM to $TARGET"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+      - name: Perform Helm rollback
+        run: |
+          TGT=${{ steps.compute.outputs.target }}
+          echo "↩️ Rolling back $REL in $NS to revision $TGT..."
+          helm rollback "$REL" "$TGT" -n "$NS"
+          helm status "$REL" -n "$NS"

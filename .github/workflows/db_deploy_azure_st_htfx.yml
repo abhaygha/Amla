@@ -1,0 +1,289 @@
+name: Z10-Build and Deploy Stage Databases
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "The Environment to deploy on"
+        required: true
+        default: "stage"
+        type: choice
+        options:
+          - stage
+          - htfxnp
+
+      branch:
+        description: "The branch to deploy from"
+        required: true
+        type: string
+        default: master
+
+      multifront_db:
+        description: "Build Multifront DB"
+        required: true
+        default: false
+        type: boolean
+
+      hangfire_db:
+        description: "Build Hangfire DB"
+        required: true
+        default: false
+        type: boolean
+
+      recommendation_db:
+        description: "Build Recommendation DB"
+        required: true
+        default: false
+        type: boolean
+
+      payment_manager_db:
+        description: "Build Pymt Mngr DB"
+        required: true
+        default: false
+        type: boolean
+
+      stage_run_number:
+        description: "Stage Build Run Number"
+        required: false
+        type: string
+
+jobs:
+  build_deploy_multifront_db:
+    runs-on: windows-2022
+    environment: ${{ github.event.inputs.environment }}
+    if: github.event.inputs.multifront_db == 'true'
+
+    steps:
+      - name: Checkout multifront db repo
+        uses: actions/checkout@v4
+        with:
+          repository: MRRSoft/znode10-multifront-db
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+          path: znode10-multifront-db
+
+      - name: Create DACPAC
+        run: |
+          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
+            /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0 `
+            "${{ github.workspace }}\znode10-multifront-db\Znode_Multifront\Znode_Multifront_Database.sln" `
+            /t:Clean,Build
+          dir "${{ github.workspace }}\znode10-multifront-db\Znode_Multifront\Znode_Multifront_Database\bin\Debug"
+
+      - name: Copy and Rename DACPAC Files to Flat Output
+        run: |
+          mkdir dacpac-out
+
+          copy "${{ github.workspace }}\znode10-multifront-db\Znode_Multifront\Znode_Multifront_Database\bin\Debug\Znode_Multifront_Database.dacpac" `
+               "dacpac-out\Znode_Multifront_Database_${{ github.event.inputs.stage_run_number }}.dacpac"
+
+          # Use standard path for master.dacpac, as VS2019 path may not exist
+          copy "${{ github.workspace }}\znode10-multifront-db\Znode_Multifront\Znode_Multifront_Database\bin\Debug\master.dacpac" `
+               "dacpac-out\master_${{ github.event.inputs.stage_run_number }}.dacpac"
+
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_PROD_SID }}
+
+      - name: Upload Newly Created DACPAC to Azure File Share
+        if: ${{ github.event.inputs.branch == 'master' || github.event.inputs.branch == 'stage' || contains(github.event.inputs.branch, 'hotfixes') }}
+        run: |
+          az storage file upload --source "dacpac-out\Znode_Multifront_Database_${{ github.event.inputs.stage_run_number }}.dacpac" `
+            --path "Znode_Multifront_Database_${{ github.event.inputs.stage_run_number }}.dacpac" `
+            --share-name multifront-dacpac `
+            --account-name ${{ secrets.MASTER_STORAGE_ACCOUNT_NAME }} `
+            --account-key ${{ secrets.MASTER_STORAGE_ACCOUNT_KEY }}
+
+          az storage file upload --source "dacpac-out\master_${{ github.event.inputs.stage_run_number }}.dacpac" `
+            --path "master_${{ github.event.inputs.stage_run_number }}.dacpac" `
+            --share-name multifront-dacpac `
+            --account-name ${{ secrets.MASTER_STORAGE_ACCOUNT_NAME }} `
+            --account-key ${{ secrets.MASTER_STORAGE_ACCOUNT_KEY }}
+
+      - name: Azure SQL Deploy
+        uses: Azure/sql-action@v1
+        with:
+          server-name: ${{ secrets.DB_SERVER_NAME }}
+          connection-string: "${{ secrets.MULTIFRONT_DB_CONNECTION_STRING }}"
+          dacpac-package: ${{ github.workspace }}\dacpac-out\Znode_Multifront_Database_${{ github.event.inputs.stage_run_number }}.dacpac
+          arguments: "/p:BlockOnPossibleDataLoss=false /p:DropObjectsNotInSource=false"
+
+      - name: Notification
+        uses: Co-qn/google-chat-notification@releases/v1
+        with:
+          name: Z10 ${{ github.event.inputs.environment }} Multifront DB
+          url: ${{ secrets.DEPLOYMENT_ALERTS }}
+          status: ${{ job.status }}
+        if: always()
+
+      - name: Failed Notification
+        if: ${{ failure() }}
+        uses: Co-qn/google-chat-notification@releases/v1
+        with:
+          name: Z10 ${{ github.event.inputs.environment }} Multifront DB
+          url: ${{ secrets.DEPLOYMENT_FAILED_ALERTS }}
+          status: ${{ job.status }}
+
+    ##########################################################################################
+
+  build_deploy_hangfire_db:
+    runs-on: windows-2022
+    environment: ${{ github.event.inputs.environment }}
+    if: github.event.inputs.hangfire_db == 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-hangfire-db
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: create dacpac
+        run: |
+          & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe' /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0  Znode_Multifront_Hangfire/Znode_Multifront_Hangfire_Database.sln /t:Clean,Build
+          dir ${{ github.workspace }}\Znode_Multifront_Hangfire\Znode_Multifront_Hangfire_Database\bin\Debug\
+
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_PROD_SID }}
+
+      - name: Upload DACPAC to Azure File Share
+        if: (inputs.branch == 'master' || inputs.branch == 'stage' || contains(inputs.branch, 'hotfixes')) && inputs.environment == 'stage'
+        run: |
+          cd ${{ github.workspace }}\Znode_Multifront_Hangfire\Znode_Multifront_Hangfire_Database\bin\Debug\
+          mv Znode_Multifront_Hangfire_Database.dacpac Znode_Multifront_Hangfire_Database_${{ inputs.stage_run_number }}.dacpac
+          az storage file upload --source ${{ github.workspace }}\Znode_Multifront_Hangfire\Znode_Multifront_Hangfire_Database\bin\Debug\Znode_Multifront_Hangfire_Database_${{ inputs.stage_run_number }}.dacpac --path Znode_Multifront_Hangfire_Database_${{ inputs.stage_run_number }}.dacpac --share-name hangfire-dacpac --account-name ${{ secrets.MASTER_STORAGE_ACCOUNT_NAME }} --account-key ${{ secrets.MASTER_STORAGE_ACCOUNT_KEY }}
+
+      - name: Azure SQL Deploy
+        uses: Azure/sql-action@v1
+        with:
+          server-name: ${{ secrets.DB_SERVER_NAME }}
+          connection-string: "${{ secrets.HANGFIRE_DB_CONNECTION_STRING }}"
+          dacpac-package: ${{ github.workspace }}\Znode_Multifront_Hangfire\Znode_Multifront_Hangfire_Database\bin\Debug\Znode_Multifront_Hangfire_Database_${{ inputs.stage_run_number }}.dacpac
+          arguments: "/p:BlockOnPossibleDataLoss=false /p:DropObjectsNotInSource=false"
+
+      - name: Notification
+        uses: Co-qn/google-chat-notification@releases/v1
+        with:
+          name: Z10 ${{ github.event.inputs.environment }} Hangfire DB
+          url: ${{ secrets.DEPLOYMENT_ALERTS }}
+          status: ${{ job.status }}
+        if: always()
+
+      - name: Failed Notification
+        if: ${{ failure() }}
+        uses: Co-qn/google-chat-notification@releases/v1
+        with:
+          name: Z10 ${{ github.event.inputs.environment }} Hangfire DB
+          url: ${{ secrets.DEPLOYMENT_FAILED_ALERTS }}
+          status: ${{ job.status }}
+  ##########################################################################################################################
+
+  build_deploy_recommendation_db:
+    runs-on: windows-2022
+    environment: ${{ github.event.inputs.environment }}
+    if: github.event.inputs.recommendation_db == 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-recommendation-engine-db
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: create dacpac
+        run: |
+          & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe' /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0  Znode_Multifront_RecommendationEngine/Znode_Multifront_RecommendationEngine_Database.sln /t:Clean,Build
+          dir ${{ github.workspace }}\Znode_Multifront_RecommendationEngine\Znode_Multifront_RecommendationEngine_Database\bin\Debug\
+
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_PROD_SID }}
+
+      - name: Upload DACPAC to Azure File Share
+        if: (inputs.branch == 'master' || inputs.branch == 'stage' || contains(inputs.branch, 'hotfixes')) && inputs.environment == 'stage'
+        run: |
+          cd ${{ github.workspace }}\Znode_Multifront_RecommendationEngine\Znode_Multifront_RecommendationEngine_Database\bin\Debug\
+          mv Znode_Multifront_RecommendationEngine_Database.dacpac Znode_Multifront_RecommendationEngine_Database_${{ inputs.stage_run_number }}.dacpac
+          az storage file upload --source ${{ github.workspace }}\Znode_Multifront_RecommendationEngine\Znode_Multifront_RecommendationEngine_Database\bin\Debug\Znode_Multifront_RecommendationEngine_Database_${{ inputs.stage_run_number }}.dacpac --path Znode_Multifront_RecommendationEngine_Database_${{ inputs.stage_run_number }}.dacpac --share-name rceg-dacpac --account-name ${{ secrets.MASTER_STORAGE_ACCOUNT_NAME }} --account-key ${{ secrets.MASTER_STORAGE_ACCOUNT_KEY }}
+
+      - name: Azure SQL Deploy
+        uses: Azure/sql-action@v1
+        with:
+          server-name: ${{ secrets.DB_SERVER_NAME }}
+          connection-string: "${{ secrets.RCEG_DB_CONNECTION_STRING }}"
+          dacpac-package: ${{ github.workspace }}\Znode_Multifront_RecommendationEngine\Znode_Multifront_RecommendationEngine_Database\bin\Debug\Znode_Multifront_RecommendationEngine_Database_${{ inputs.stage_run_number }}.dacpac
+          arguments: "/p:BlockOnPossibleDataLoss=false /p:DropObjectsNotInSource=false"
+
+      - name: Notification
+        uses: Co-qn/google-chat-notification@releases/v1
+        with:
+          name: Z10 ${{ github.event.inputs.environment }} Recommendation DB
+          url: ${{ secrets.DEPLOYMENT_ALERTS }}
+          status: ${{ job.status }}
+        if: always()
+
+      - name: Failed Notification
+        if: ${{ failure() }}
+        uses: Co-qn/google-chat-notification@releases/v1
+        with:
+          name: Z10 ${{ github.event.inputs.environment }} Recommendation DB
+          url: ${{ secrets.DEPLOYMENT_FAILED_ALERTS }}
+          status: ${{ job.status }}
+
+  ##########################################################################################################################
+
+  build_deploy_payment_manager_db:
+    runs-on: windows-2022
+    environment: ${{ github.event.inputs.environment }}
+    if: github.event.inputs.payment_manager_db == 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: MRRSoft/znode10-plugin-payment-db
+          token: ${{ secrets.ACCESS_REPO }}
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: create dacpac
+        run: |
+          & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe' /p:DeployOnBuild=true /p:TransformConfigFiles=true /p:WarningLevel=0  Znode_Multifront_Plugin_Payment/Znode_Multifront_Plugin_Payment_Database.sln /t:Clean,Build
+          dir ${{ github.workspace }}\Znode_Multifront_Plugin_Payment\Znode_Multifront_Plugin_Payment\bin\Debug\Znode_Multifront_Plugin_Payment.dacpac
+
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_PROD_SID }}
+
+      - name: Upload DACPAC to Azure File Share
+        if: (inputs.branch == 'master' || inputs.branch == 'stage' || contains(inputs.branch, 'hotfixes')) && inputs.environment == 'stage'
+        run: |
+          cd ${{ github.workspace }}\Znode_Multifront_Plugin_Payment\Znode_Multifront_Plugin_Payment\bin\Debug\
+          mv Znode_Multifront_Plugin_Payment.dacpac Znode_Multifront_Plugin_Payment_${{ inputs.stage_run_number }}.dacpac
+          az storage file upload --source ${{ github.workspace }}\Znode_Multifront_Plugin_Payment\Znode_Multifront_Plugin_Payment\bin\Debug\Znode_Multifront_Plugin_Payment_${{ inputs.stage_run_number }}.dacpac --path Znode_Multifront_Plugin_Payment_${{ inputs.stage_run_number }}.dacpac --share-name payment-dacpac --account-name ${{ secrets.MASTER_STORAGE_ACCOUNT_NAME }} --account-key ${{ secrets.MASTER_STORAGE_ACCOUNT_KEY }}
+
+      - name: Azure SQL Deploy
+        uses: Azure/sql-action@v1
+        with:
+          server-name: ${{ secrets.DB_SERVER_NAME }}
+          connection-string: "${{ secrets.PAYMT_MNGR_DB_CONNECTION_STRING }}"
+          dacpac-package: ${{ github.workspace }}\Znode_Multifront_Plugin_Payment\Znode_Multifront_Plugin_Payment\bin\Debug\Znode_Multifront_Plugin_Payment_${{ inputs.stage_run_number }}.dacpac
+          arguments: "/p:BlockOnPossibleDataLoss=false /p:DropObjectsNotInSource=false"
+
+      - name: Notification
+        uses: Co-qn/google-chat-notification@releases/v1
+        with:
+          name: Z10 ${{ github.event.inputs.environment }} Payment Manager DB
+          url: ${{ secrets.DEPLOYMENT_ALERTS }}
+          status: ${{ job.status }}
+        if: always()
+
+      - name: Failed Notification
+        if: ${{ failure() }}
+        uses: Co-qn/google-chat-notification@releases/v1
+        with:
+          name: Z10 ${{ github.event.inputs.environment }} Payment Manager DB
+          url: ${{ secrets.DEPLOYMENT_FAILED_ALERTS }}
+          status: ${{ job.status }}

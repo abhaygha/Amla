@@ -1,0 +1,78 @@
+global:
+  timezone: Asia/Kolkata  
+
+resources:
+  znode10xadmin:
+    configmap:
+      appsettings__IsLocalEnvironment: "true"
+
+  znode10xapi:
+    configmap:
+      appsettings__IsLocalEnvironment: "true"
+
+  znode10xcustomtable:
+    configmap:
+      appsettings__IsLocalEnvironment: "true"
+
+  znode10xcommerceconnectoradmin:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10xcommerceconnectoradmin
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      ASPNETCORE_CULTURE: en_US.UTF-8
+      ASPNETCORE_HTTPS_PORT: http://+:80
+      ASPNETCORE_UI_CULTURE: en_US.UTF-8
+      ASPNETCORE_URLS: http://+:80
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.{{ .Release.Namespace }}:27017/Znode_10xFeature_Docker_LogMessage"
+      appsettings__CommerceConnectorApi: "http://znode10xcommerceconnectorapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeAPI: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeAuthorizationKey: "Basic YXBpLXoxMC1kZXYuYW1sYS5pb3w5MzMxOTFiOS02ZWI5LTQ4YjAtYTE0Zi05MDE4MjcxOGM5OTE="
+  znode10xcommerceconnectorapi:
+    enableService: true
+    serviceType: ClusterIP
+    port: 80
+    minReplicas: 1
+    maxReplicas: 1
+    replicaCount: 1
+    image:
+      name: znode10xcommerceconnectorapi
+      pullPolicy: Always
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    configmap:
+      ASPNETCORE_CULTURE: en_US.UTF-8
+      ASPNETCORE_HTTPS_PORT: http://+:80
+      ASPNETCORE_UI_CULTURE: en_US.UTF-8
+      ASPNETCORE_URLS: http://+:80
+      ConnectionStrings__ZnodeCommerceConnectorDB: "{{ .Values.global.db.wbst_db }}"
+      ConnectionStrings__ZnodeMongoDBForLog: "mongodb://znode10xmongodb.{{ .Release.Namespace }}:27017/Znode_10xFeature_Docker_LogMessage"
+      appsettings__CommerceConnectorApi: "http://znode10xcommerceconnectorapi.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeAPI: "http://znode10xapigateways.{{ .Release.Namespace }}.svc.cluster.local"
+      appsettings__ZnodeAuthorizationKey: "Basic YXBpLXoxMC1kZXYuYW1sYS5pb3w5MzMxOTFiOS02ZWI5LTQ4YjAtYTE0Zi05MDE4MjcxOGM5OTE="
+      ConnectionStrings__HangfireConnection: "{{ .Values.global.db.hgfr_db }}"
+
+  znode10xwebstore:
+    configmap:
+      REDIS_SENTINEL_ENABLED: "true"
+      
+  znode10xutility:
+    configmap: 
+      DB_NAME: "z10_wbst_dev6"

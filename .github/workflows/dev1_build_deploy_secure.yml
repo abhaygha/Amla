@@ -54,4 +54,3 @@ jobs:
       skip_security_scan: ${{ inputs.skip_security_scan }}
       security_gate_enabled: ${{ inputs.security_gate_enabled }}
     secrets: inherit
-
