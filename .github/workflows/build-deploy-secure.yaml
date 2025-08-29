@@ -69,35 +69,61 @@ jobs:
         id: set
         shell: powershell
         run: |
+          Write-Host "Starting matrix generation..."
+          
+          # Get inputs
           $ALL = '${{ inputs.all }}'
           $INPUT_SERVICES = '${{ inputs.services }}'
-          $servicesObj = $INPUT_SERVICES | ConvertFrom-Json
-          $selectedServices = @()
           
-          foreach ($service in $servicesObj.PSObject.Properties) {
-            if ($service.Name -ne "all" -and $service.Value -eq $true) {
-              $selectedServices += $service.Name
+          Write-Host "ALL: $ALL"
+          Write-Host "INPUT_SERVICES: $INPUT_SERVICES"
+          
+          try {
+            # Parse services JSON
+            $servicesObj = $INPUT_SERVICES | ConvertFrom-Json
+            Write-Host "Parsed services object successfully"
+            
+            # Get selected services
+            $selectedServices = @()
+            foreach ($service in $servicesObj.PSObject.Properties) {
+              Write-Host "Service: $($service.Name) = $($service.Value)"
+              if ($service.Name -ne "all" -and $service.Value -eq $true) {
+                $selectedServices += $service.Name
+              }
             }
-          }
-          
-          $SELECTED = $selectedServices -join ","
-          
-          if ($ALL -eq "true") {
+            
+            Write-Host "Selected services: $($selectedServices -join ',')"
+            
+            # Load config
             $CONFIG = Get-Content ".github/services-config.json" | ConvertFrom-Json
-            $FINAL = $CONFIG
-          } else {
-            $CONFIG = Get-Content ".github/services-config.json" | ConvertFrom-Json
-            $FINAL = $CONFIG | Where-Object { $selectedServices -contains $_.service }
-          }
-
-          $COUNT = $FINAL.Count
-          if ($COUNT -eq 0) {
-            Write-Host "❌ No services selected or matched. Skipping build."
+            Write-Host "Loaded config with $($CONFIG.Count) services"
+            
+            # Generate matrix
+            if ($ALL -eq "true") {
+              $FINAL = $CONFIG
+              Write-Host "Using all services from config"
+            } else {
+              $FINAL = $CONFIG | Where-Object { $selectedServices -contains $_.service }
+              Write-Host "Filtered to $($FINAL.Count) selected services"
+            }
+            
+            # Output results
+            $COUNT = $FINAL.Count
+            if ($COUNT -eq 0) {
+              Write-Host "❌ No services selected or matched. Skipping build."
+              "matrix=[]" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            } else {
+              Write-Host "✅ Found $COUNT services to build"
+              $matrixJson = $FINAL | ConvertTo-Json -Compress
+              Write-Host "Matrix JSON: $matrixJson"
+              "matrix=$matrixJson" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+              "services_list=$($selectedServices -join ',')" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            }
+          } catch {
+            Write-Host "❌ Error in matrix generation: $_"
+            Write-Host "Stack trace: $($_.ScriptStackTrace)"
             "matrix=[]" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            Write-Host "✅ Found $COUNT services to build"
-            "matrix=$($FINAL | ConvertTo-Json -Compress)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            "services_list=$SELECTED" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            exit 1
           }
 
   # Security Scanning Phase
