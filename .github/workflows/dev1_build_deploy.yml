@@ -1,7 +1,17 @@
 name: Trigger - Z10 DEV1
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - int
+      - dev1
+      - dev2
+  pull_request:
+    branches:
+      - int
+      - dev1
+      - dev2
+  workflow_dispatch:  # Keep manual trigger for emergencies
     inputs:
       tenant:
         description: Tenant name
@@ -14,7 +24,7 @@ on:
       branch:
         description: Git branch to deploy
         required: true
-        default: int
+        default: master
       namespace:
         description: Target namespace (e.g., znode, dev1)
         required: true
