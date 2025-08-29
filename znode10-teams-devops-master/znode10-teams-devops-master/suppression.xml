@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    
+    <!-- Suppress false positives for .NET Framework components -->
+    <suppress>
+        <notes>False positive for .NET Framework - this is a Microsoft signed component</notes>
+        <gav>Microsoft.NETFramework:Microsoft.NETFramework</gav>
+        <cve>CVE-2023-1234</cve>
+    </suppress>
+    
+    <!-- Suppress known issues in development dependencies -->
+    <suppress>
+        <notes>Development dependency with known low-risk vulnerability</notes>
+        <gav>org.example:dev-tool</gav>
+        <cve>CVE-2023-5678</cve>
+    </suppress>
+    
+    <!-- Suppress vulnerabilities in test frameworks -->
+    <suppress>
+        <notes>Test framework vulnerability - not in production code</notes>
+        <gav>org.test:test-framework</gav>
+        <cve>CVE-2023-9012</cve>
+    </suppress>
+    
+    <!-- Suppress specific package versions with false positives -->
+    <suppress>
+        <notes>False positive for specific version - issue resolved in newer versions</notes>
+        <gav>com.example:library</gav>
+        <cve>CVE-2023-3456</cve>
+    </suppress>
+    
+    <!-- Suppress vulnerabilities that don't affect our usage -->
+    <suppress>
+        <notes>Vulnerability doesn't affect our specific usage pattern</notes>
+        <gav>org.security:security-lib</gav>
+        <cve>CVE-2023-7890</cve>
+    </suppress>
+    
+    <!-- Suppress packages that are internal/private -->
+    <suppress>
+        <notes>Internal package - not publicly available</notes>
+        <gav>com.internal:private-lib</gav>
+        <cve>CVE-2023-1111</cve>
+    </suppress>
+    
+    <!-- Suppress packages with workarounds in place -->
+    <suppress>
+        <notes>Vulnerability mitigated by configuration/workaround</notes>
+        <gav>org.config:config-lib</gav>
+        <cve>CVE-2023-2222</cve>
+    </suppress>
+    
+    <!-- Suppress packages that are being phased out -->
+    <suppress>
+        <notes>Package being deprecated - will be removed in next release</notes>
+        <gav>org.legacy:old-lib</gav>
+        <cve>CVE-2023-3333</cve>
+    </suppress>
+    
+    <!-- Suppress packages with acceptable risk level -->
+    <suppress>
+        <notes>Low risk vulnerability - acceptable for current environment</notes>
+        <gav>org.lowrisk:low-lib</gav>
+        <cve>CVE-2023-4444</cve>
+    </suppress>
+    
+    <!-- Suppress packages with compensating controls -->
+    <suppress>
+        <notes>Vulnerability mitigated by network security controls</notes>
+        <gav>org.network:network-lib</gav>
+        <cve>CVE-2023-5555</cve>
+    </suppress>
+    
+    <!-- Suppress packages with time-based exceptions -->
+    <suppress until="2024-12-31">
+        <notes>Temporary suppression until fix is available</notes>
+        <gav>org.temp:temp-lib</gav>
+        <cve>CVE-2023-6666</cve>
+    </suppress>
+    
+</suppressions>
+

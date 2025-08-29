@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # SonarQube for SAST testing
+  sonarqube:
+    image: sonarqube:9.9-community
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/api/system/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # OWASP Dependency Check
+  dependency-check:
+    image: owasp/dependency-check:latest
+    volumes:
+      - ./test-code:/src
+      - ./results:/report
+      - dependency-check-data:/usr/share/dependency-check/data
+    command: >
+      --scan /src
+      --format "HTML" "JSON" "SARIF"
+      --out /report
+      --failOnCVSS 7
+      --enableRetired
+      --prettyPrint
+
+  # Trivy for image scanning
+  trivy:
+    image: aquasec/trivy:latest
+    volumes:
+      - ./test-code:/src
+      - ./results:/report
+    working_dir: /src
+    command: >
+      config .
+      --format json
+      --output /report/trivy-config.json
+      --severity HIGH,CRITICAL
+
+  # OWASP ZAP for DAST testing (using correct image)
+  zap:
+    image: owasp/zap2docker-stable:latest
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./results:/zap/wrk
+    command: >
+      zap-baseline.py
+      -t http://localhost:8081
+      -J /zap/wrk/zap-report.json
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  dependency-check-data:

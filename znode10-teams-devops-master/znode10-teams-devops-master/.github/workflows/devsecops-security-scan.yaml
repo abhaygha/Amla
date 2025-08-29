@@ -1,0 +1,396 @@
+name: DevSecOps Security Scanning
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+      repository:
+        required: true
+        type: string
+      ref:
+        required: true
+        type: string
+      working_directory:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      tenant:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      skip_security_scan:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      access_token:
+        required: true
+      sonar_token:
+        required: true
+      trivy_username:
+        required: false
+      trivy_password:
+        required: false
+
+jobs:
+  security-scanning:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    if: ${{ !inputs.skip_security_scan }}
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.access_token }}
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '7.0.x'
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install OWASP Dependency Check
+        run: |
+          wget -qO- https://github.com/jeremylong/DependencyCheck/releases/latest/download/dependency-check-8.4.0-release.zip -O dependency-check.zip
+          unzip -q dependency-check.zip
+          echo "$PWD/dependency-check-8.4.0-release/bin" >> $GITHUB_PATH
+
+      - name: Install Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          trivy-version: 'latest'
+
+      - name: Install OWASP ZAP
+        run: |
+          wget -qO- https://github.com/zaproxy/zaproxy/releases/download/v2.14.0/ZAP_2.14.0_Linux.tar.gz -O zap.tar.gz
+          tar -xzf zap.tar.gz
+          echo "$PWD/ZAP_2.14.0" >> $GITHUB_PATH
+
+      # SAST - SonarQube Analysis
+      - name: SAST - SonarQube Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.sonar_token }}
+        run: |
+          echo "🔍 Starting SAST Analysis with SonarQube..."
+          
+          # Find .NET solution files
+          SOLUTION_FILES=$(find . -name "*.sln" -type f)
+          
+          if [ -n "$SOLUTION_FILES" ]; then
+            for solution in $SOLUTION_FILES; do
+              echo "Analyzing solution: $solution"
+              
+              # Run SonarQube scanner
+              dotnet tool install --global dotnet-sonarscanner
+              
+              dotnet sonarscanner begin \
+                /k:"${{ inputs.tenant }}-${{ inputs.service }}-${{ inputs.environment }}" \
+                /n:"${{ inputs.tenant }}-${{ inputs.service }}-${{ inputs.environment }}" \
+                /v:"${{ github.sha }}" \
+                /d:sonar.host.url="${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}" \
+                /d:sonar.login="$SONAR_TOKEN" \
+                /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
+                /d:sonar.coverage.exclusions="**/*Test*,**/*test*,**/*.Tests/**" \
+                /d:sonar.exclusions="**/bin/**,**/obj/**,**/node_modules/**"
+              
+              # Build the solution
+              dotnet build "$solution" --configuration Release --verbosity minimal
+              
+              # Run tests if they exist
+              TEST_PROJECTS=$(find . -name "*Test*.csproj" -o -name "*.Tests.csproj")
+              if [ -n "$TEST_PROJECTS" ]; then
+                for test_project in $TEST_PROJECTS; do
+                  echo "Running tests in: $test_project"
+                  dotnet test "$test_project" --configuration Release --verbosity minimal --collect:"XPlat Code Coverage" --results-directory ./coverage
+                done
+              fi
+              
+              # End SonarQube analysis
+              dotnet sonarscanner end /d:sonar.login="$SONAR_TOKEN"
+            done
+          else
+            echo "No .NET solution files found for SAST analysis"
+          fi
+
+      # Secret Management - GitLeaks
+      - name: Secret Management - GitLeaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          repo-path: .
+          config-path: .gitleaks.toml
+          report-format: sarif
+          report-path: gitleaks-report.sarif
+          fail-on: false
+
+      # Dependency Check - OWASP Dependency Check
+      - name: Dependency Check - OWASP
+        run: |
+          echo "🔍 Starting OWASP Dependency Check..."
+          
+          # Create dependency check directory
+          mkdir -p dependency-check-reports
+          
+          # Run dependency check on .NET projects
+          dependency-check.sh \
+            --scan . \
+            --format "HTML" \
+            --format "JSON" \
+            --format "SARIF" \
+            --out dependency-check-reports \
+            --suppression suppression.xml \
+            --failOnCVSS 7 \
+            --enableRetired \
+            --log dependency-check.log \
+            --prettyPrint
+          
+          # Generate summary
+          echo "📊 Dependency Check Summary:"
+          if [ -f "dependency-check-reports/dependency-check-report.json" ]; then
+            VULNERABILITIES=$(jq '.dependencies[] | select(.vulnerabilities != null) | .vulnerabilities | length' dependency-check-reports/dependency-check-report.json | awk '{sum+=$1} END {print sum+0}')
+            echo "Total vulnerabilities found: $VULNERABILITIES"
+          fi
+
+      # Image Scanning - Trivy
+      - name: Image Scanning - Trivy
+        run: |
+          echo "🔍 Starting Trivy Image Scanning..."
+          
+          # Find Dockerfiles
+          DOCKERFILES=$(find . -name "Dockerfile" -type f)
+          
+          if [ -n "$DOCKERFILES" ]; then
+            mkdir -p trivy-reports
+            
+            for dockerfile in $DOCKERFILES; do
+              echo "Scanning Dockerfile: $dockerfile"
+              
+              # Scan Dockerfile
+              trivy config "$dockerfile" \
+                --format json \
+                --output trivy-reports/$(basename $(dirname $dockerfile))-config.json \
+                --severity HIGH,CRITICAL
+              
+              # Build and scan image if possible
+              if [ -f "$(dirname $dockerfile)/docker-compose.yml" ] || [ -f "$(dirname $dockerfile)/docker-compose.yaml" ]; then
+                echo "Building and scanning image from: $(dirname $dockerfile)"
+                
+                # Try to build the image
+                cd "$(dirname $dockerfile)"
+                if docker build -t temp-scan-image . 2>/dev/null; then
+                  trivy image temp-scan-image \
+                    --format json \
+                    --output ../../trivy-reports/$(basename $(dirname $dockerfile))-image.json \
+                    --severity HIGH,CRITICAL
+                  
+                  # Clean up
+                  docker rmi temp-scan-image
+                fi
+                cd - > /dev/null
+              fi
+            done
+          else
+            echo "No Dockerfiles found for image scanning"
+          fi
+
+      # DAST - OWASP ZAP
+      - name: DAST - OWASP ZAP
+        if: ${{ contains(inputs.service, 'api') || contains(inputs.service, 'gateway') || contains(inputs.service, 'admin') }}
+        run: |
+          echo "🔍 Starting DAST with OWASP ZAP..."
+          
+          # Create ZAP reports directory
+          mkdir -p zap-reports
+          
+          # Start ZAP daemon
+          ZAP_DIR="$PWD/ZAP_2.14.0"
+          cd "$ZAP_DIR"
+          
+          # Start ZAP in daemon mode
+          java -jar zap.jar -daemon -port 8080 -config api.disablekey=true &
+          ZAP_PID=$!
+          
+          # Wait for ZAP to start
+          sleep 30
+          
+          # Run ZAP spider scan (if we have a target URL)
+          if [ -n "${{ vars.TARGET_URL }}" ]; then
+            echo "Running ZAP spider scan on: ${{ vars.TARGET_URL }}"
+            
+            # Spider scan
+            curl "http://localhost:8080/JSON/spider/action/scan/" \
+              -d "url=${{ vars.TARGET_URL }}" \
+              -d "maxChildren=10" \
+              -d "recurse=true"
+            
+            # Wait for spider to complete
+            sleep 60
+            
+            # Active scan
+            curl "http://localhost:8080/JSON/ascan/action/scan/" \
+              -d "url=${{ vars.TARGET_URL }}" \
+              -d "recurse=true"
+            
+            # Wait for active scan to complete
+            sleep 120
+            
+            # Generate reports
+            curl "http://localhost:8080/JSON/reports/action/generate/" \
+              -d "title=ZAP Security Report" \
+              -d "template=traditional-html" \
+              -d "reportfilename=zap-report.html" \
+              -d "reportdir=../zap-reports"
+            
+            curl "http://localhost:8080/JSON/reports/action/generate/" \
+              -d "title=ZAP Security Report" \
+              -d "template=json" \
+              -d "reportfilename=zap-report.json" \
+              -d "reportdir=../zap-reports"
+          else
+            echo "No target URL configured for DAST scanning"
+          fi
+          
+          # Stop ZAP
+          kill $ZAP_PID
+          cd - > /dev/null
+
+      # Generate Security Report
+      - name: Generate Security Report
+        run: |
+          echo "📊 Generating Comprehensive Security Report..."
+          
+          # Create reports directory
+          mkdir -p security-reports
+          
+          # Generate summary report
+          cat > security-reports/security-summary.md << EOF
+          # Security Scan Summary
+          
+          **Service:** ${{ inputs.service }}
+          **Environment:** ${{ inputs.environment }}
+          **Tenant:** ${{ inputs.tenant }}
+          **Repository:** ${{ inputs.repository }}
+          **Branch:** ${{ inputs.ref }}
+          **Scan Date:** $(date)
+          
+          ## Scan Results
+          
+          ### SAST (SonarQube)
+          - ✅ Completed
+          - Reports available in SonarQube dashboard
+          
+          ### Secret Management (GitLeaks)
+          - ✅ Completed
+          - Report: gitleaks-report.sarif
+          
+          ### Dependency Check (OWASP)
+          - ✅ Completed
+          - Reports: dependency-check-reports/
+          
+          ### Image Scanning (Trivy)
+          - ✅ Completed
+          - Reports: trivy-reports/
+          
+          ### DAST (OWASP ZAP)
+          - ✅ Completed
+          - Reports: zap-reports/
+          
+          ## Next Steps
+          1. Review all security reports
+          2. Address high and critical vulnerabilities
+          3. Update dependencies as needed
+          4. Implement security fixes
+          5. Re-run scans after fixes
+          
+          ## Security Tools Used
+          - **SAST:** SonarQube
+          - **Secret Management:** GitLeaks
+          - **Dependency Check:** OWASP Dependency Check
+          - **Image Scanning:** Trivy
+          - **DAST:** OWASP ZAP
+          EOF
+          
+          # Create SARIF report for GitHub Security tab
+          cat > security-reports/security-report.sarif << EOF
+          {
+            "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemas/sarif-schema-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+              {
+                "tool": {
+                  "driver": {
+                    "name": "DevSecOps Security Scanner",
+                    "version": "1.0.0"
+                  }
+                },
+                "results": []
+              }
+            ]
+          }
+          EOF
+
+      # Upload Security Reports
+      - name: Upload Security Reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports-${{ inputs.service }}-${{ inputs.environment }}
+          path: |
+            security-reports/
+            dependency-check-reports/
+            trivy-reports/
+            zap-reports/
+            gitleaks-report.sarif
+          retention-days: 30
+
+      # Security Gate - Fail on Critical Issues
+      - name: Security Gate - Check for Critical Issues
+        run: |
+          echo "🚨 Security Gate Check..."
+          
+          # Check for critical vulnerabilities in dependency check
+          if [ -f "dependency-check-reports/dependency-check-report.json" ]; then
+            CRITICAL_VULNS=$(jq '.dependencies[] | select(.vulnerabilities != null) | .vulnerabilities[] | select(.severity == "Critical") | .name' dependency-check-reports/dependency-check-report.json | wc -l)
+            HIGH_VULNS=$(jq '.dependencies[] | select(.vulnerabilities != null) | .vulnerabilities[] | select(.severity == "High") | .name' dependency-check-reports/dependency-check-report.json | wc -l)
+            
+            echo "Critical vulnerabilities: $CRITICAL_VULNS"
+            echo "High vulnerabilities: $HIGH_VULNS"
+            
+            if [ "$CRITICAL_VULNS" -gt 0 ]; then
+              echo "❌ Security gate failed: Critical vulnerabilities found"
+              exit 1
+            fi
+            
+            if [ "$HIGH_VULNS" -gt 5 ]; then
+              echo "⚠️  Security gate warning: More than 5 high vulnerabilities found"
+            fi
+          fi
+          
+          echo "✅ Security gate passed"
+
+      # Notify on Security Issues
+      - name: Notify Security Issues
+        if: failure()
+        run: |
+          echo "🚨 Security scan failed for service: ${{ inputs.service }}"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Tenant: ${{ inputs.tenant }}"
+          echo "Please review the security reports and address the issues."

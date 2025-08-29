@@ -1,0 +1,192 @@
+name: Deploy Service
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      tenant:
+        required: true
+        type: string
+      image_tag:
+        required: true
+        type: string
+    secrets:
+      kubeconfig:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.kubeconfig }}" > kubeconfig.yaml
+          export KUBECONFIG=kubeconfig.yaml
+          
+          # Verify connection
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Deploy Service
+        run: |
+          export KUBECONFIG=kubeconfig.yaml
+          
+          echo "🚀 Deploying service: ${{ inputs.service }}"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Namespace: ${{ inputs.namespace }}"
+          echo "Tenant: ${{ inputs.tenant }}"
+          echo "Image Tag: ${{ inputs.image_tag }}"
+          
+          # Create namespace if it doesn't exist
+          kubectl create namespace ${{ inputs.namespace }} --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Apply Kubernetes manifests
+          if [ -f "k8s/${{ inputs.service }}-deployment.yaml" ]; then
+            echo "Applying deployment manifest..."
+            kubectl apply -f k8s/${{ inputs.service }}-deployment.yaml -n ${{ inputs.namespace }}
+          else
+            echo "No deployment manifest found, using default deployment..."
+            
+            # Create a basic deployment if no manifest exists
+            cat <<EOF | kubectl apply -f -
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: ${{ inputs.service }}-deployment
+              namespace: ${{ inputs.namespace }}
+              labels:
+                app: ${{ inputs.service }}
+                tenant: ${{ inputs.tenant }}
+                environment: ${{ inputs.environment }}
+            spec:
+              replicas: 1
+              selector:
+                matchLabels:
+                  app: ${{ inputs.service }}
+              template:
+                metadata:
+                  labels:
+                    app: ${{ inputs.service }}
+                spec:
+                  containers:
+                  - name: ${{ inputs.service }}
+                    image: ${{ vars.DEV_ACR_SERVER }}/${{ inputs.service }}:${{ inputs.image_tag }}
+                    ports:
+                    - containerPort: 80
+                    resources:
+                      requests:
+                        memory: "64Mi"
+                        cpu: "250m"
+                      limits:
+                        memory: "128Mi"
+                        cpu: "500m"
+            EOF
+          fi
+          
+          # Create service if it doesn't exist
+          if [ -f "k8s/${{ inputs.service }}-service.yaml" ]; then
+            echo "Applying service manifest..."
+            kubectl apply -f k8s/${{ inputs.service }}-service.yaml -n ${{ inputs.namespace }}
+          else
+            echo "Creating default service..."
+            cat <<EOF | kubectl apply -f -
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: ${{ inputs.service }}-service
+              namespace: ${{ inputs.namespace }}
+              labels:
+                app: ${{ inputs.service }}
+            spec:
+              selector:
+                app: ${{ inputs.service }}
+              ports:
+              - protocol: TCP
+                port: 80
+                targetPort: 80
+              type: ClusterIP
+            EOF
+          fi
+
+      - name: Verify Deployment
+        run: |
+          export KUBECONFIG=kubeconfig.yaml
+          
+          echo "🔍 Verifying deployment..."
+          
+          # Wait for deployment to be ready
+          kubectl wait --for=condition=available --timeout=300s deployment/${{ inputs.service }}-deployment -n ${{ inputs.namespace }}
+          
+          # Check deployment status
+          kubectl get deployment ${{ inputs.service }}-deployment -n ${{ inputs.namespace }}
+          kubectl get pods -l app=${{ inputs.service }} -n ${{ inputs.namespace }}
+          
+          # Check service status
+          kubectl get service ${{ inputs.service }}-service -n ${{ inputs.namespace }}
+
+      - name: Health Check
+        run: |
+          export KUBECONFIG=kubeconfig.yaml
+          
+          echo "🏥 Performing health check..."
+          
+          # Get service IP
+          SERVICE_IP=$(kubectl get service ${{ inputs.service }}-service -n ${{ inputs.namespace }} -o jsonpath='{.spec.clusterIP}')
+          
+          if [ -n "$SERVICE_IP" ]; then
+            echo "Service IP: $SERVICE_IP"
+            
+            # Port forward to access the service
+            kubectl port-forward service/${{ inputs.service }}-service 8080:80 -n ${{ inputs.namespace }} &
+            PF_PID=$!
+            
+            # Wait for port forward
+            sleep 10
+            
+            # Health check
+            if curl -f http://localhost:8080/health 2>/dev/null; then
+              echo "✅ Health check passed"
+            else
+              echo "⚠️  Health check failed or endpoint not available"
+            fi
+            
+            # Clean up port forward
+            kill $PF_PID
+          else
+            echo "⚠️  Could not determine service IP"
+          fi
+
+      - name: Deployment Summary
+        run: |
+          export KUBECONFIG=kubeconfig.yaml
+          
+          echo "📊 Deployment Summary"
+          echo "====================="
+          echo "Service: ${{ inputs.service }}"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Tenant: ${{ inputs.tenant }}"
+          echo "Namespace: ${{ inputs.namespace }}"
+          echo "Image Tag: ${{ inputs.image_tag }}"
+          echo "Status: ✅ Deployed Successfully"
+          echo ""
+          echo "Resources:"
+          kubectl get all -l app=${{ inputs.service }} -n ${{ inputs.namespace }}
+

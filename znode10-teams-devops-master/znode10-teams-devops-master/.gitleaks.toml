@@ -1,0 +1,109 @@
+# GitLeaks configuration for Znode10 Teams DevOps
+# This file configures what secrets to look for during scanning
+
+[allowlist]
+description = "Allowlist for false positives"
+paths = [
+    '''\.md$''',
+    '''\.txt$''',
+    '''\.log$''',
+    '''\.json$''',
+    '''\.xml$''',
+    '''\.yml$''',
+    '''\.yaml$''',
+    '''\.toml$''',
+    '''\.lock$''',
+    '''\.csproj$''',
+    '''\.sln$''',
+    '''\.gitignore$''',
+    '''\.dockerignore$''',
+    '''Dockerfile$''',
+    '''docker-compose\.yml$''',
+    '''docker-compose\.yaml$''',
+    '''\.github/workflows/.*\.yml$''',
+    '''\.github/workflows/.*\.yaml$''',
+    '''\.github/services-config\.json$'',
+    '''\.gitleaks\.toml$'',
+    '''suppression\.xml$'',
+    '''README\.md$'',
+    '''pull_request\.md$'',
+    '''\.trigger$'',
+    '''\.gitmodules$''
+]
+
+commits = [
+    "allowlisted-commit-hash-here"
+]
+
+regexes = [
+    '''(?i)(test|example|sample|demo|fake|dummy|placeholder)'''
+]
+
+[allowlist.description]
+regexes = [
+    '''(?i)(test|example|sample|demo|fake|dummy|placeholder)'''
+]
+
+# Configure rules for different types of secrets
+[[rules]]
+id = "azure-storage-account-key"
+description = "Azure Storage Account Access Key"
+regex = '''AccountKey=[a-zA-Z0-9+/=]{88}'''
+tags = ["key", "azure", "storage"]
+severity = "HIGH"
+
+[[rules]]
+id = "azure-connection-string"
+description = "Azure Connection String"
+regex = '''DefaultEndpointsProtocol=https;AccountName=[a-zA-Z0-9]+;AccountKey=[a-zA-Z0-9+/=]{88};EndpointSuffix=core\.windows\.net'''
+tags = ["key", "azure", "connection-string"]
+severity = "HIGH"
+
+[[rules]]
+id = "sql-connection-string"
+description = "SQL Server Connection String with Password"
+regex = '''Server=[^;]+;Initial Catalog=[^;]+;User ID=[^;]+;Password=[^;]+;'''
+tags = ["key", "sql", "database", "password"]
+severity = "HIGH"
+
+[[rules]]
+id = "jwt-secret"
+description = "JWT Secret Key"
+regex = '''(?i)(jwt|jwe|jws)_?(secret|key|token)["\s]*[:=]\s*["`']([a-zA-Z0-9+/=]{32,})["`']'''
+tags = ["key", "jwt", "authentication"]
+severity = "HIGH"
+
+[[rules]]
+id = "api-key"
+description = "API Key"
+regex = '''(?i)(api|access|secret)_?key["\s]*[:=]\s*["`']([a-zA-Z0-9+/=]{16,})["`']'''
+tags = ["key", "api", "access"]
+severity = "HIGH"
+
+[[rules]]
+id = "google-api-key"
+description = "Google API Key"
+regex = '''AIza[0-9A-Za-z\-_]{35}'''
+tags = ["key", "google", "api"]
+severity = "HIGH"
+
+[[rules]]
+id = "new-relic-license-key"
+description = "New Relic License Key"
+regex = '''[a-f0-9]{40}NRAL'''
+tags = ["key", "newrelic", "monitoring"]
+severity = "HIGH"
+
+[[rules]]
+id = "auth-root-key"
+description = "Authentication Root Key"
+regex = '''[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}'''
+tags = ["key", "authentication", "uuid"]
+severity = "MEDIUM"
+
+# Output configuration
+[output]
+format = "sarif"
+file = "gitleaks-report.sarif"
+verbose = true
+
