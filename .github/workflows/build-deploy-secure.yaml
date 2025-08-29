@@ -48,7 +48,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install jq
-        shell: pwsh
+        shell: powershell
         run: |
           if ($env:RUNNER_OS -eq "Windows") {
             # Windows - jq should be pre-installed or use chocolatey
@@ -67,19 +67,27 @@ jobs:
 
       - name: Generate Matrix
         id: set
-        shell: pwsh
+        shell: powershell
         run: |
           $ALL = '${{ inputs.all }}'
           $INPUT_SERVICES = '${{ inputs.services }}'
-          $SELECTED = $INPUT_SERVICES | ConvertFrom-Json | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -ne "all" } | ForEach-Object { $_.Name } | Where-Object { ($INPUT_SERVICES | ConvertFrom-Json).$_ -eq $true } | Join-String -Separator ","
+          $servicesObj = $INPUT_SERVICES | ConvertFrom-Json
+          $selectedServices = @()
+          
+          foreach ($service in $servicesObj.PSObject.Properties) {
+            if ($service.Name -ne "all" -and $service.Value -eq $true) {
+              $selectedServices += $service.Name
+            }
+          }
+          
+          $SELECTED = $selectedServices -join ","
           
           if ($ALL -eq "true") {
             $CONFIG = Get-Content ".github/services-config.json" | ConvertFrom-Json
             $FINAL = $CONFIG
           } else {
             $CONFIG = Get-Content ".github/services-config.json" | ConvertFrom-Json
-            $KEYS = $SELECTED -split ","
-            $FINAL = $CONFIG | Where-Object { $KEYS -contains $_.service }
+            $FINAL = $CONFIG | Where-Object { $selectedServices -contains $_.service }
           }
 
           $COUNT = $FINAL.Count
