@@ -1,0 +1,170 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Kubernetes Storage & Persistent Volumes",
+    "tags": ["kubernetes", "storage", "persistent-volumes", "storage-classes"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Persistent Volume Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_persistentvolume_info) by (phase)",
+            "legendFormat": "{{phase}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 1},
+                {"color": "green", "value": 2}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Storage Class Usage",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_persistentvolumeclaim_info) by (storageclass)",
+            "legendFormat": "{{storageclass}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Persistent Volume Claims by Namespace",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_persistentvolumeclaim_info) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Storage Capacity Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes * 100",
+            "legendFormat": "{{persistentvolumeclaim}} - {{namespace}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Usage %", "min": 0, "max": 100}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "Persistent Volume Details",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "kube_persistentvolume_capacity_bytes",
+            "legendFormat": "{{persistentvolume}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"__name__": true, "Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "persistentvolume": "PV",
+                "storageclass": "Storage Class",
+                "Value": "Capacity (bytes)"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Storage I/O Operations",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(node_disk_reads_completed_total[5m])",
+            "legendFormat": "{{instance}} - Reads"
+          },
+          {
+            "expr": "rate(node_disk_writes_completed_total[5m])",
+            "legendFormat": "{{instance}} - Writes"
+          }
+        ],
+        "yAxes": [
+          {"label": "Operations/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 7,
+        "title": "Storage I/O Bandwidth",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(node_disk_read_bytes_total[5m])",
+            "legendFormat": "{{instance}} - Read"
+          },
+          {
+            "expr": "rate(node_disk_written_bytes_total[5m])",
+            "legendFormat": "{{instance}} - Write"
+          }
+        ],
+        "yAxes": [
+          {"label": "Bytes/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+      },
+      {
+        "id": 8,
+        "title": "Storage Errors",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(node_disk_io_time_seconds_total[5m])",
+            "legendFormat": "{{instance}} - IO Time"
+          }
+        ],
+        "yAxes": [
+          {"label": "IO Time (seconds)"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

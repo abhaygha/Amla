@@ -1,0 +1,139 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Pod & Workload Health",
+    "tags": ["kubernetes", "pods", "workloads", "deployments"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Pod Status Summary",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_pod_info) by (phase)",
+            "legendFormat": "{{phase}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 1},
+                {"color": "green", "value": 2}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Deployment Status",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "kube_deployment_status_replicas_available / kube_deployment_spec_replicas",
+            "legendFormat": "{{deployment}} - {{namespace}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"__name__": true, "Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "deployment": "Deployment",
+                "namespace": "Namespace",
+                "Value": "Available/Desired"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Pod Restart Count",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "increase(kube_pod_container_status_restarts_total[1h])",
+            "legendFormat": "{{pod}} - {{namespace}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Restarts (1h)"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 18, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Pod Resource Usage - CPU",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{container!=\"POD\",container!=\"\"}[5m])) by (pod, namespace)",
+            "legendFormat": "{{namespace}}/{{pod}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "CPU cores"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Pod Resource Usage - Memory",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(container_memory_usage_bytes{container!=\"POD\",container!=\"\"}) by (pod, namespace)",
+            "legendFormat": "{{namespace}}/{{pod}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Memory (bytes)"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Failed Pods",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "kube_pod_status_phase{phase=\"Failed\"}",
+            "legendFormat": "{{pod}} - {{namespace}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"__name__": true, "Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "pod": "Pod",
+                "namespace": "Namespace",
+                "phase": "Status"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

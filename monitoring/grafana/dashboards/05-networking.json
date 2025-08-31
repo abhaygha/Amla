@@ -1,0 +1,148 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Kubernetes Networking & Ingress",
+    "tags": ["kubernetes", "networking", "ingress", "services"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Count by Namespace",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_service_info) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Ingress Status",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "kube_ingress_status_phase",
+            "legendFormat": "{{ingress}} - {{namespace}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"__name__": true, "Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "ingress": "Ingress",
+                "namespace": "Namespace",
+                "phase": "Status"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Network Policy Count",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_networkpolicy_info)",
+            "legendFormat": "Network Policies"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Service Endpoints",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "kube_service_spec_type",
+            "legendFormat": "{{service}} - {{namespace}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "DNS Resolution",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(coredns_dns_request_duration_seconds_count[5m])",
+            "legendFormat": "DNS Requests/sec"
+          }
+        ],
+        "yAxes": [
+          {"label": "Requests/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Network Errors",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(node_network_receive_errs_total[5m])",
+            "legendFormat": "{{instance}} - Receive Errors"
+          },
+          {
+            "expr": "rate(node_network_transmit_errs_total[5m])",
+            "legendFormat": "{{instance}} - Transmit Errors"
+          }
+        ],
+        "yAxes": [
+          {"label": "Errors/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Load Balancer Status",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "kube_service_status_load_balancer_ingress",
+            "legendFormat": "{{service}} - {{namespace}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"__name__": true, "Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "service": "Service",
+                "namespace": "Namespace",
+                "ingress_ip": "IP"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

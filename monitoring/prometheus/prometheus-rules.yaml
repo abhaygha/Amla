@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: monitoring
+data:
+  kubernetes-alerts.yml: |
+    groups:
+      - name: kubernetes
+        rules:
+          # Node alerts
+          - alert: NodeDown
+            expr: up == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Node {{ $labels.instance }} is down"
+              description: "Node {{ $labels.instance }} has been down for more than 5 minutes."
+
+          - alert: HighNodeCPU
+            expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High CPU usage on {{ $labels.instance }}"
+              description: "CPU usage is above 80% on {{ $labels.instance }}"
+
+          - alert: HighNodeMemory
+            expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage on {{ $labels.instance }}"
+              description: "Memory usage is above 80% on {{ $labels.instance }}"
+
+          - alert: HighNodeDisk
+            expr: (node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes * 100 > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High disk usage on {{ $labels.instance }}"
+              description: "Disk usage is above 80% on {{ $labels.instance }}"
+
+          # Pod alerts
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total[15m]) * 60 > 0
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.pod }} is crash looping"
+              description: "Pod {{ $labels.pod }} is restarting {{ printf \"%.2f\" $value }} times / 5 minutes."
+
+          - alert: PodNotReady
+            expr: kube_pod_status_ready{condition="true"} == 0
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.pod }} is not ready"
+              description: "Pod {{ $labels.pod }} has been in a non-ready state for more than 5 minutes."
+
+          # Deployment alerts
+          - alert: DeploymentNotAvailable
+            expr: kube_deployment_status_replicas_available / kube_deployment_spec_replicas < 0.5
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Deployment {{ $labels.deployment }} is not available"
+              description: "Deployment {{ $labels.deployment }} has less than 50% of replicas available."
+
+          # Service alerts
+          - alert: ServiceDown
+            expr: up{job="kubernetes-service-endpoints"} == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Service {{ $labels.service }} is down"
+              description: "Service {{ $labels.service }} has been down for more than 5 minutes."
+
+      - name: dotnet-apps
+        rules:
+          # .NET application specific alerts
+          - alert: HighDotNetMemoryUsage
+            expr: process_private_memory_bytes / 1024 / 1024 > 1000
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage in .NET app {{ $labels.pod }}"
+              description: ".NET application {{ $labels.pod }} is using more than 1GB of memory"
+
+          - alert: HighDotNetCPUUsage
+            expr: rate(process_cpu_seconds_total[5m]) * 100 > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High CPU usage in .NET app {{ $labels.pod }}"
+              description: ".NET application {{ $labels.pod }} CPU usage is above 80%"
+
+          - alert: DotNetAppDown
+            expr: up{job="dotnet-apps"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: ".NET application {{ $labels.pod }} is down"
+              description: ".NET application {{ $labels.pod }} has been down for more than 1 minute"

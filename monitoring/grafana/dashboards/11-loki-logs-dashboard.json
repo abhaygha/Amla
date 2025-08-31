@@ -1,0 +1,125 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Loki Logs Dashboard",
+    "tags": ["kubernetes", "loki", "logs", "monitoring"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Log Volume by Namespace",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate({job=\"kubernetes-pods\"}[5m])) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Log Lines/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Log Volume by Pod",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate({job=\"kubernetes-pods\"}[5m])) by (pod)",
+            "legendFormat": "{{pod}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Log Lines/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Error Logs by Application",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate({job=\"kubernetes-pods\", level=\"error\"}[5m])) by (app)",
+            "legendFormat": "{{app}} - Errors"
+          }
+        ],
+        "yAxes": [
+          {"label": "Error Logs/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Warning Logs by Application",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate({job=\"kubernetes-pods\", level=\"warn\"}[5m])) by (app)",
+            "legendFormat": "{{app}} - Warnings"
+          }
+        ],
+        "yAxes": [
+          {"label": "Warning Logs/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Log Query Examples",
+        "type": "text",
+        "content": "## Sample Log Queries\n\n**All logs from a specific namespace:**\n```\n{namespace=\"monitoring\"}\n```\n\n**Error logs from all pods:**\n```\n{job=\"kubernetes-pods\"} |= \"error\"\n```\n\n**Logs containing specific text:**\n```\n{job=\"kubernetes-pods\"} |= \"connection refused\"\n```\n\n**Logs from specific time range:**\n```\n{job=\"kubernetes-pods\"} [5m]\n```",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "Loki Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"loki\"}",
+            "legendFormat": "Loki Service"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 24}
+      },
+      {
+        "id": 7,
+        "title": "Log Storage Usage",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "loki_build_info",
+            "legendFormat": "Loki Version"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 24}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

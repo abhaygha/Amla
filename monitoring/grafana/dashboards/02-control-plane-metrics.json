@@ -1,0 +1,101 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Kubernetes Control Plane Metrics",
+    "tags": ["kubernetes", "control-plane", "api-server"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "API Server Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(apiserver_request_total[5m])",
+            "legendFormat": "{{resource}} {{verb}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Requests/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "API Server Request Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(apiserver_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "95th percentile"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(apiserver_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "50th percentile"
+          }
+        ],
+        "yAxes": [
+          {"label": "Duration (seconds)"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "API Server Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(apiserver_request_total{code=~\"5..\"}[5m])",
+            "legendFormat": "5xx errors"
+          },
+          {
+            "expr": "rate(apiserver_request_total{code=~\"4..\"}[5m])",
+            "legendFormat": "4xx errors"
+          }
+        ],
+        "yAxes": [
+          {"label": "Errors/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Scheduler Success Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(scheduler_scheduling_algorithm_duration_seconds_count[5m])",
+            "legendFormat": "Scheduling Rate"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Controller Manager Work Queue Depth",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "workqueue_depth{name=~\".*controller.*\"}",
+            "legendFormat": "{{name}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Queue Depth"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

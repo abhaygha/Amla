@@ -1,0 +1,194 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Business Metrics & Custom SLOs",
+    "tags": ["kubernetes", "business", "slo", "kpi", "user-experience"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "User Experience Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])",
+            "legendFormat": "Average Response Time"
+          }
+        ],
+        "yAxes": [
+          {"label": "Response Time (seconds)"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Business Transaction Success Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(business_transactions_total{status=\"success\"}[5m]) / rate(business_transactions_total[5m]) * 100",
+            "legendFormat": "Success Rate %"
+          }
+        ],
+        "yAxes": [
+          {"label": "Success Rate %", "min": 0, "max": 100}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Custom Application Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(custom_metric_total[5m])",
+            "legendFormat": "Custom Metric Rate"
+          }
+        ],
+        "yAxes": [
+          {"label": "Events/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Business KPI Dashboard",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(business_transactions_total[5m]))",
+            "legendFormat": "Transaction Rate"
+          },
+          {
+            "expr": "sum(rate(business_revenue_total[5m]))",
+            "legendFormat": "Revenue Rate"
+          },
+          {
+            "expr": "sum(rate(business_users_active[5m]))",
+            "legendFormat": "Active Users"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 8, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "SLO Compliance - Availability",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(up{job=\"kubernetes-service-endpoints\"}[5m]) * 100",
+            "legendFormat": "Service Availability %"
+          }
+        ],
+        "yAxes": [
+          {"label": "Availability %", "min": 0, "max": 100}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "SLO Compliance - Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "95th Percentile Response Time"
+          }
+        ],
+        "yAxes": [
+          {"label": "Response Time (seconds)"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Custom Business Alerts",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "custom_business_alert",
+            "legendFormat": "{{alert_type}} - {{severity}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"__name__": true, "Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "alert_type": "Alert Type",
+                "severity": "Severity",
+                "Value": "Status"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 8,
+        "title": "Business Impact Score",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "business_impact_score",
+            "legendFormat": "Overall Impact Score"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 70},
+                {"color": "green", "value": 90}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      },
+      {
+        "id": 9,
+        "title": "Custom SLO Summary",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "custom_slo_compliance",
+            "legendFormat": "{{slo_name}} - {{target}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"__name__": true, "Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "slo_name": "SLO Name",
+                "target": "Target",
+                "Value": "Compliance %"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

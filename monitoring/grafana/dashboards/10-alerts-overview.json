@@ -1,0 +1,225 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Alerts Overview & Management",
+    "tags": ["kubernetes", "alerts", "alertmanager", "monitoring"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Active Alerts by Severity",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(ALERTS{alertstate=\"firing\"}) by (severity)",
+            "legendFormat": "{{severity}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Alert Firing Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(ALERTS{alertstate=\"firing\"}[5m])",
+            "legendFormat": "Firing Alerts"
+          }
+        ],
+        "yAxes": [
+          {"label": "Alerts/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Alert Resolution Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(ALERTS{alertstate=\"resolved\"}[5m])",
+            "legendFormat": "Resolved Alerts"
+          }
+        ],
+        "yAxes": [
+          {"label": "Alerts/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 18, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Alerts by Service/Component",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "count(ALERTS{alertstate=\"firing\"}) by (service)",
+            "legendFormat": "{{service}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Alert Count"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Alert Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "time() - ALERTS{alertstate=\"firing\"}",
+            "legendFormat": "{{alertname}} - {{severity}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Duration (seconds)"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Alert Manager Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"alertmanager\"}",
+            "legendFormat": "Alert Manager"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Silence Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(alertmanager_silences{state=\"active\"})",
+            "legendFormat": "Active Silences"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 16}
+      },
+      {
+        "id": 8,
+        "title": "Alert Routing Status",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "alertmanager_notifications_total",
+            "legendFormat": "{{receiver}} - {{status}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"__name__": true, "Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "receiver": "Receiver",
+                "status": "Status",
+                "Value": "Count"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 9,
+        "title": "Alert History Timeline",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "changes(ALERTS{alertstate=\"firing\"}[1h])",
+            "legendFormat": "Alert State Changes"
+          }
+        ],
+        "yAxes": [
+          {"label": "State Changes"}
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+      },
+      {
+        "id": 10,
+        "title": "Alert Summary by Namespace",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "count(ALERTS{alertstate=\"firing\"}) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"__name__": true, "Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "namespace": "Namespace",
+                "Value": "Active Alerts"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32}
+      },
+      {
+        "id": 11,
+        "title": "Alert Response Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(alertmanager_notification_latency_seconds_bucket[5m]))",
+            "legendFormat": "95th percentile"
+          }
+        ],
+        "yAxes": [
+          {"label": "Response Time (seconds)"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

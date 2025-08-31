@@ -1,0 +1,193 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Kubernetes Security & Policies",
+    "tags": ["kubernetes", "security", "rbac", "policies"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "RBAC Overview",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_role_info)",
+            "legendFormat": "Roles"
+          },
+          {
+            "expr": "count(kube_clusterrole_info)",
+            "legendFormat": "Cluster Roles"
+          },
+          {
+            "expr": "count(kube_rolebinding_info)",
+            "legendFormat": "Role Bindings"
+          },
+          {
+            "expr": "count(kube_clusterrolebinding_info)",
+            "legendFormat": "Cluster Role Bindings"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Service Account Usage",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_serviceaccount_info) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Security Context Violations",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_pod_container_security_context{run_as_non_root=\"false\"})",
+            "legendFormat": "Non-Root Violations"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "red", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Network Policy Coverage",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_networkpolicy_info)",
+            "legendFormat": "Network Policies"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "Pod Security Standards",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "kube_pod_container_security_context",
+            "legendFormat": "{{pod}} - {{namespace}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"__name__": true, "Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "pod": "Pod",
+                "namespace": "Namespace",
+                "run_as_non_root": "Non-Root",
+                "read_only_root_filesystem": "Read-Only Root"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "RBAC Permissions",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "kube_role_rules",
+            "legendFormat": "{{role}} - {{namespace}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"__name__": true, "Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "role": "Role",
+                "namespace": "Namespace",
+                "api_groups": "API Groups",
+                "resources": "Resources",
+                "verbs": "Verbs"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 7,
+        "title": "Security Context Compliance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "count(kube_pod_container_security_context{run_as_non_root=\"true\"}) by (namespace)",
+            "legendFormat": "{{namespace}} - Compliant"
+          },
+          {
+            "expr": "count(kube_pod_container_security_context{run_as_non_root=\"false\"}) by (namespace)",
+            "legendFormat": "{{namespace}} - Non-Compliant"
+          }
+        ],
+        "yAxes": [
+          {"label": "Pod Count"}
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+      },
+      {
+        "id": 8,
+        "title": "Policy Violations Timeline",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "count_over_time(kube_pod_container_security_context{run_as_non_root=\"false\"}[1h])",
+            "legendFormat": "Non-Root Violations"
+          }
+        ],
+        "yAxes": [
+          {"label": "Violation Count"}
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}
